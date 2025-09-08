@@ -480,14 +480,3 @@ class ChatGLM4InstructMediaNode_Copy:
         answer = createRequest(payload)
         # print(payload.choices[0].message)
         return (answer,)
-
-
-NODE_CLASS_MAPPINGS = {
-    "ChatGLM4InstructMediaNode_Copy": ChatGLM4InstructMediaNode_Copy,
-    "ChatGLM4InstructNode_Copy": ChatGLM4InstructNode_Copy,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "ChatGLM4InstructMediaNode_Copy": "ChatGLM4 Instruct Media Node (copy)",
-    "ChatGLM4InstructNode_Copy": "ChatGLM4 Instruct Node (Copy)",
-}

@@ -1,3 +1,4 @@
+from .chatglm_node import ChatGLM4InstructMediaNode_Copy, ChatGLM4InstructNode_Copy
 from .face2mask import FaceToMaskCopy
 from .load_image_from_url import LoadImageAndMaskFromUrl
 from .prompt_logo_cleaner import PromptLogoCleaner
@@ -8,6 +9,8 @@ NODE_CLASS_MAPPINGS = {
     "RasterCardMaker": RasterCardMaker,
     "PromptLogoCleaner": PromptLogoCleaner,
     "LoadImageAndMaskFromUrl": LoadImageAndMaskFromUrl,
+    "ChatGLM4InstructNode_Copy": ChatGLM4InstructNode_Copy,
+    "ChatGLM4InstructMediaNode_Copy": ChatGLM4InstructMediaNode_Copy,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -15,4 +18,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RasterCardMaker": "Raster Card Maker",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
     "LoadImageAndMaskFromUrl": "Load Image And Mask From Url",
+    "ChatGLM4InstructNode_Copy": "ChatGLM4 Instruct Node (Copy)",
+    "ChatGLM4InstructMediaNode_Copy": "ChatGLM4 Instruct Media Node (copy)",
 }
