@@ -31,6 +31,8 @@ F_SET = "sets.txt"
 # 简单缓存，避免每次都读盘
 _RULE_CACHE = {}
 
+_ROOT_DIR = os.path.dirname(__file__)
+
 
 def _normalize(s: str) -> str:
     if s is None:
@@ -82,12 +84,8 @@ def _load_rules(dir_path: Path):
 
 
 def _default_rules_dir(rules_dir: str = "") -> Path:
-    if rules_dir and str(rules_dir).strip():
-        return Path(rules_dir)
-    env_dir = os.environ.get("CATEGORY_RULES_DIR")
-    if env_dir:
-        return Path(env_dir)
-    return Path("./rules")
+    rules_dir = rules_dir.strip() or "garment_category_rules"
+    return Path(os.path.join(_ROOT_DIR, rules_dir))
 
 
 def _tokenize(name_nrm: str):
