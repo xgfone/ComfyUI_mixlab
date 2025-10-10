@@ -1,0 +1,10 @@
+{
+    "__comment": "Get an API key from Volcengine Ark console. Set ARK_API_KEY and default_model (ep-xxxxx).",
+    "ARK_API_KEY": "your_api_key",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "default_model": "doubao-seed-1-6-flash-250828",
+    "request_timeout_sec": 30,
+    "default_temperature": 0.7,
+    "default_top_p": 0.95,
+    "default_max_tokens": 1024
+}

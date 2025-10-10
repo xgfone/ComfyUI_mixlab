@@ -3,3 +3,6 @@ numpy
 pillow
 opencv-python
 requests
+
+# doubao
+volcengine-python-sdk[ark]

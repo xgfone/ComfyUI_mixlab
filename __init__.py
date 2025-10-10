@@ -1,3 +1,4 @@
+from .doubao import DoubaoSingleTurnChatNodeSDK
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
 from .load_image_from_url import LoadImageAndMaskFromUrl
@@ -11,6 +12,7 @@ NODE_CLASS_MAPPINGS = {
     "LoadImageAndMaskFromUrl": LoadImageAndMaskFromUrl,
     "GarmentCategoryMapper": GarmentCategoryMapper,
     "GarmentCategoryMapperBatch": GarmentCategoryMapperBatch,
+    "DoubaoSingleTurnChatNodeSDK": DoubaoSingleTurnChatNodeSDK,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -20,4 +22,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadImageAndMaskFromUrl": "Load Image And Mask From Url",
     "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
     "GarmentCategoryMapperBatch": "Garment Category Mapper (Batch)",
+    "DoubaoSingleTurnChatNodeSDK": "Doubao Chat (Single Turn, Ark SDK)",
 }
