@@ -4,6 +4,7 @@ from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
 from .load_image_from_url import LoadImageAndMaskFromUrl
 from .prompt_logo_cleaner import PromptLogoCleaner
 from .raster_card_maker import RasterCardMaker
+from .seedream_concurrent import SeedreamImageGenerateConcurrent
 
 NODE_CLASS_MAPPINGS = {
     "FaceToMaskCopy": FaceToMaskCopy,
@@ -13,6 +14,7 @@ NODE_CLASS_MAPPINGS = {
     "GarmentCategoryMapper": GarmentCategoryMapper,
     "GarmentCategoryMapperBatch": GarmentCategoryMapperBatch,
     "DoubaoSingleTurnChatNodeSDKv2": DoubaoSingleTurnChatNodeSDKv2,
+    "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -23,4 +25,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
     "GarmentCategoryMapperBatch": "Garment Category Mapper (Batch)",
     "DoubaoSingleTurnChatNodeSDKv2": "Doubao Chat (Single Turn, Ark SDK)",
+    "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
 }

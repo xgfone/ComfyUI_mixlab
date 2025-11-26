@@ -6,3 +6,6 @@ requests
 
 # doubao
 volcengine-python-sdk[ark]
+
+# seedream
+aiohttp
