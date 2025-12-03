@@ -2,11 +2,13 @@ from .doubao import DoubaoSingleTurnChatNodeSDKv2
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
 from .load_image_from_url import LoadImageAndMaskFromUrl
+from .mask_sort import MaskSorter
 from .prompt_logo_cleaner import PromptLogoCleaner
 from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
 
 NODE_CLASS_MAPPINGS = {
+    "MaskSorter": MaskSorter,
     "FaceToMaskCopy": FaceToMaskCopy,
     "RasterCardMaker": RasterCardMaker,
     "PromptLogoCleaner": PromptLogoCleaner,
@@ -18,6 +20,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
     "FaceToMaskCopy": "Face To Mask(Copy)",
     "RasterCardMaker": "Raster Card Maker",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
