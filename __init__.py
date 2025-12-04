@@ -1,3 +1,4 @@
+from .aliyun_face_beauty import AliyunFaceBeautyNode
 from .doubao import DoubaoSingleTurnChatNodeSDKv2
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
@@ -11,6 +12,7 @@ NODE_CLASS_MAPPINGS = {
     "MaskSorter": MaskSorter,
     "FaceToMaskCopy": FaceToMaskCopy,
     "RasterCardMaker": RasterCardMaker,
+    "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
     "LoadImageAndMaskFromUrl": LoadImageAndMaskFromUrl,
     "GarmentCategoryMapper": GarmentCategoryMapper,
@@ -23,6 +25,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
     "FaceToMaskCopy": "Face To Mask(Copy)",
     "RasterCardMaker": "Raster Card Maker",
+    "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
     "LoadImageAndMaskFromUrl": "Load Image And Mask From Url",
     "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
