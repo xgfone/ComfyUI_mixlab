@@ -54,6 +54,8 @@ class SeedreamImageGenerateConcurrent:
                 "use_local_images": ("BOOLEAN", {"default": True, "tooltip": "使用本地图像（Base64格式，官方支持）"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 18446744073709551615, "step": 1}),
                 "enable_auto_retry": ("BOOLEAN", {"default": True, "tooltip": "启用自动重试机制"}),
+                "max_retries": ("INT", {"default": 2, "tooltip": "最大重试次数"}),
+                "timeout": ("INT", {"default": 600, "tooltip": "超时时间，单位秒"}),
             },
             "optional": {"image2": ("IMAGE",), "image3": ("IMAGE",), "image4": ("IMAGE",), "image5": ("IMAGE",)},
         }
@@ -166,11 +168,11 @@ class SeedreamImageGenerateConcurrent:
             placeholder = Image.new("RGB", (512, 512), color="black")
             return self.pil_to_tensor(placeholder)
 
-    def initialize_client(self, base_url):
+    def initialize_client(self, base_url, max_retries=600, timeout=2):
         api_key = os.environ.get("ARK_API_KEY")
         if not api_key:
             raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
-        self.client = Ark(base_url=base_url, api_key=api_key.strip())
+        self.client = Ark(base_url=base_url, api_key=api_key.strip(), max_retries=max_retries, timeout=timeout)
 
     # 改为异步入口函数
     async def generate_images(
@@ -189,6 +191,8 @@ class SeedreamImageGenerateConcurrent:
         use_local_images,
         seed,
         enable_auto_retry,
+        max_retries=600,
+        timeout=2,
         image2=None,
         image3=None,
         image4=None,
@@ -212,7 +216,7 @@ class SeedreamImageGenerateConcurrent:
             raise ValueError("输入验证失败")
 
         # 初始化客户端
-        self.initialize_client(base_url)
+        self.initialize_client(base_url, max_retries=max_retries, timeout=timeout)
 
         # 准备输入图像 (预处理，避免在异步循环中重复处理)
         input_images = [img for img in [image1, image2, image3, image4, image5] if img is not None]

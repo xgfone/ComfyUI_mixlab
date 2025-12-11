@@ -120,14 +120,7 @@ def _get_base_url(cfg: Dict[str, Any]) -> str:
     return base
 
 
-_CLIENT_SINGLETON = None
-
-
-def _get_client():
-    global _CLIENT_SINGLETON
-    if _CLIENT_SINGLETON is not None:
-        return _CLIENT_SINGLETON
-
+def _get_client(max_retries: int = 2, timeout: int = 600):
     if Ark is None:
         raise RuntimeError(
             "[DoubaoNodeSDKv2] Ark SDK import failed. Install it in your ComfyUI environment:\n"
@@ -138,8 +131,7 @@ def _get_client():
     base_url = _get_base_url(CONFIG)
 
     # Initialize Ark client (OpenAI-compatible)
-    _CLIENT_SINGLETON = Ark(base_url=base_url, api_key=api_key)
-    return _CLIENT_SINGLETON
+    return Ark(base_url=base_url, api_key=api_key, max_retries=max_retries, timeout=timeout)
 
 
 # -------------------------
@@ -193,9 +185,16 @@ def _pil_to_data_url_png(img: Image.Image) -> str:
 
 
 def _ark_chat_single_turn(
-    model: str, messages: list, temperature: float, top_p: float, max_tokens: int, enable_deep_thinking: bool
+    model: str,
+    messages: list,
+    temperature: float,
+    top_p: float,
+    max_tokens: int,
+    enable_deep_thinking: bool,
+    max_retries: int = 2,
+    timeout: int = 600,
 ) -> str:
-    client = _get_client()
+    client = _get_client(max_retries=max_retries, timeout=timeout)
 
     extra_body = None
     if enable_deep_thinking:
@@ -309,6 +308,8 @@ class DoubaoSingleTurnChatNodeSDKv2:
                         "default": False,
                     },
                 ),
+                "max_retries": ("INT", {"default": 2, "tooltip": "最大重试次数"}),
+                "timeout": ("INT", {"default": 600, "tooltip": "超时时间，单位秒"}),
             },
             "optional": {
                 "system_prompt": (
@@ -339,6 +340,8 @@ class DoubaoSingleTurnChatNodeSDKv2:
         top_p: float,
         deep_thinking: bool,
         system_prompt: str = "",
+        max_retries: int = 2,
+        timeout: int = 600,
         image_1=None,
         image_2=None,
         image_3=None,
@@ -381,5 +384,7 @@ class DoubaoSingleTurnChatNodeSDKv2:
             top_p=top_p,
             max_tokens=max_tokens,
             enable_deep_thinking=deep_thinking,
+            max_retries=max_retries,
+            timeout=timeout,
         )
         return (text,)
