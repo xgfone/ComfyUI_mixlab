@@ -13,7 +13,8 @@ from volcenginesdkarkruntime.types.images.images import SequentialImageGeneratio
 
 class SeedreamImageGenerateConcurrent:
     """
-    A ComfyUI node for generating images using Volcengine Seedream API with Concurrency Support
+    A ComfyUI node for generating images using Volcengine Seedream API
+    Features: Concurrency, Timeout, Smart Filtering, and Auto-Retry
     """
 
     @classmethod
@@ -31,11 +32,7 @@ class SeedreamImageGenerateConcurrent:
                     {"default": "1:1"},
                 ),
                 "sequential_image_generation": (["auto", "enabled", "disabled"], {"default": "auto"}),
-                # 新增并发控制参数
-                "batch_size": (
-                    "INT",
-                    {"default": 1, "min": 1, "max": 5, "step": 1, "tooltip": "并发请求数量（同时发起多少个任务）"},
-                ),
+                "batch_size": ("INT", {"default": 1, "min": 1, "max": 5, "step": 1, "tooltip": "并发请求数量"}),
                 "max_images": (
                     "INT",
                     {
@@ -43,32 +40,32 @@ class SeedreamImageGenerateConcurrent:
                         "min": 1,
                         "max": 10,
                         "step": 1,
-                        "label": "images_per_req",  # UI显示名称
-                        "tooltip": "单次请求生成的图片数量（组图模式）",
+                        "label": "images_per_req",
+                        "tooltip": "单次请求生成的图片数量",
                     },
                 ),
                 "response_format": (["url", "b64_json"], {"default": "url"}),
                 "watermark": ("BOOLEAN", {"default": False}),
                 "stream": ("BOOLEAN", {"default": False}),
                 "base_url": ("STRING", {"default": "https://ark.cn-beijing.volces.com/api/v3"}),
-                "use_local_images": ("BOOLEAN", {"default": True, "tooltip": "使用本地图像（Base64格式，官方支持）"}),
+                "use_local_images": ("BOOLEAN", {"default": True, "tooltip": "使用本地图像（Base64格式）"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 18446744073709551615, "step": 1}),
-                "enable_auto_retry": ("BOOLEAN", {"default": True, "tooltip": "启用自动重试机制"}),
-                "max_retries": ("INT", {"default": 2, "tooltip": "最大重试次数"}),
-                "timeout": ("INT", {"default": 600, "tooltip": "超时时间，单位秒"}),
+                "enable_auto_retry": ("BOOLEAN", {"default": True, "tooltip": "启用输入验证的自动重试"}),
+                "max_retries": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "最大重试的次数。"}),
+                "timeout": ("INT", {"default": 70, "min": 10, "max": 300, "step": 1, "tooltip": "最大等待时间(秒)。"}),
             },
             "optional": {"image2": ("IMAGE",), "image3": ("IMAGE",), "image4": ("IMAGE",), "image5": ("IMAGE",)},
         }
 
     RETURN_TYPES = ("IMAGE", "STRING")
     RETURN_NAMES = ("images", "text")
-    OUTPUT_IS_LIST = (False, False)  # 改回False，因为我们会把所有批次结果合并成一个大Batch
+    OUTPUT_IS_LIST = (False, False)
     FUNCTION = "generate_images"
     CATEGORY = "image/generation"
 
     def __init__(self):
         self.client = None
-        self.max_retries = 3
+        self.input_validation_retries = 3
         self.retry_delay = 1.0
 
     def tensor_to_pil(self, tensor):
@@ -81,13 +78,9 @@ class SeedreamImageGenerateConcurrent:
         return torch.from_numpy(img)[None,]
 
     def validate_input_data(self, image1, retry_count=0):
-        # ... (保持原有的验证逻辑不变) ...
         max_retries = 3
         if image1 is None:
             if retry_count < max_retries:
-                print(
-                    f"输入验证失败 (尝试 {retry_count + 1}/{max_retries + 1}): image1 为 None，等待 {self.retry_delay} 秒后重试..."
-                )
                 time.sleep(self.retry_delay)
                 return False, "image1_none"
             else:
@@ -107,7 +100,6 @@ class SeedreamImageGenerateConcurrent:
         return True, "success"
 
     def convert_image_to_supported_format(self, pil_image, use_local_images=False):
-        # ... (保持原有的转换逻辑不变) ...
         try:
             if use_local_images:
                 try:
@@ -119,8 +111,7 @@ class SeedreamImageGenerateConcurrent:
                     pil_image.save(buffered, format="PNG")
                     img_bytes = buffered.getvalue()
                     img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-                    data_url = f"data:image/png;base64,{img_base64}"
-                    return data_url
+                    return f"data:image/png;base64,{img_base64}"
                 except Exception:
                     return self._get_example_image_url()
             return self._get_example_image_url()
@@ -153,7 +144,6 @@ class SeedreamImageGenerateConcurrent:
         }
         return ratio_map.get(aspect_ratio, "2048x2048")
 
-    # 新增异步下载函数
     async def _download_image_async(self, session, url):
         try:
             async with session.get(url) as response:
@@ -164,17 +154,15 @@ class SeedreamImageGenerateConcurrent:
                     image = image.convert("RGB")
                 return self.pil_to_tensor(image)
         except Exception as e:
-            print(f"下载失败: {e}")
-            placeholder = Image.new("RGB", (512, 512), color="black")
-            return self.pil_to_tensor(placeholder)
+            print(f"下载图片失败: {e}")
+            return None  # 下载失败返回 None，不返回黑色占位符
 
-    def initialize_client(self, base_url, max_retries=600, timeout=2):
+    def initialize_client(self, base_url):
         api_key = os.environ.get("ARK_API_KEY")
         if not api_key:
             raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
-        self.client = Ark(base_url=base_url, api_key=api_key.strip(), max_retries=max_retries, timeout=timeout)
+        self.client = Ark(base_url=base_url, api_key=api_key.strip())
 
-    # 改为异步入口函数
     async def generate_images(
         self,
         prompt,
@@ -184,6 +172,8 @@ class SeedreamImageGenerateConcurrent:
         sequential_image_generation,
         batch_size,
         max_images,
+        timeout,
+        max_retries,
         response_format,
         watermark,
         stream,
@@ -191,15 +181,13 @@ class SeedreamImageGenerateConcurrent:
         use_local_images,
         seed,
         enable_auto_retry,
-        max_retries=600,
-        timeout=2,
         image2=None,
         image3=None,
         image4=None,
         image5=None,
     ):
-        # 验证逻辑 (保持同步)
-        max_attempts = self.max_retries + 1 if enable_auto_retry else 1
+        # --- 1. 输入验证 ---
+        max_attempts = self.input_validation_retries + 1 if enable_auto_retry else 1
         validation_passed = False
         for retry_count in range(max_attempts):
             try:
@@ -215,10 +203,9 @@ class SeedreamImageGenerateConcurrent:
         if not validation_passed:
             raise ValueError("输入验证失败")
 
-        # 初始化客户端
-        self.initialize_client(base_url, max_retries=max_retries, timeout=timeout)
+        self.initialize_client(base_url)
 
-        # 准备输入图像 (预处理，避免在异步循环中重复处理)
+        # --- 2. 准备输入图像 ---
         input_images = [img for img in [image1, image2, image3, image4, image5] if img is not None]
         image_urls = []
         for img_tensor in input_images:
@@ -232,21 +219,19 @@ class SeedreamImageGenerateConcurrent:
         size = self.aspect_ratio_to_size(aspect_ratio)
         generation_options = SequentialImageGenerationOptions(max_images=max_images)
 
-        # 定义单个任务的异步函数
-        async def process_single_batch(task_index):
-            current_seed = seed + task_index
-            # 映射 Seed 防止溢出
-            normalized_seed = current_seed if current_seed <= 2147483647 else current_seed % 2147483647
+        # --- 3. 定义单个任务逻辑 ---
+        async def process_single_batch(task_index, current_try_seed):
+            # 确保 Seed 不溢出
+            normalized_seed = current_try_seed if current_try_seed <= 2147483647 else current_try_seed % 2147483647
 
             task_log = []
             task_tensors = []
 
             try:
-                # 使用 asyncio.to_thread 在线程池中运行同步 SDK 调用，防止阻塞
-                # 注意：Ark SDK 目前不支持 seed 参数，但我们逻辑上使用它来区分任务
                 print(f"🚀 启动任务 {task_index + 1}/{batch_size} (Seed: {normalized_seed})")
-
                 loop = asyncio.get_running_loop()
+
+                # API 调用
                 images_response = await loop.run_in_executor(
                     None,
                     lambda: self.client.images.generate(
@@ -259,53 +244,116 @@ class SeedreamImageGenerateConcurrent:
                         response_format=response_format,
                         watermark=watermark,
                         stream=stream,
+                        # 注意：Seedream API 目前可能不支持直接传 seed，但我们在逻辑上区分了任务
                     ),
                 )
 
-                # 处理结果
-                task_log.append(f"✅ 任务 {task_index + 1} 完成，生成 {len(images_response.data)} 张图")
+                task_log.append(f"✅ 任务 {task_index + 1} 成功，API返回 {len(images_response.data)} 张图")
 
-                # 异步下载图片
+                # 下载图片
                 async with aiohttp.ClientSession() as session:
                     if response_format == "url":
                         download_tasks = [
                             self._download_image_async(session, item.url) for item in images_response.data
                         ]
-                        task_tensors = await asyncio.gather(*download_tasks)
+                        downloaded_results = await asyncio.gather(*download_tasks)
+                        # 过滤下载失败的 None
+                        task_tensors = [t for t in downloaded_results if t is not None]
                     else:
-                        # 处理 b64_json
                         import base64
 
                         for item in images_response.data:
-                            image_bytes = base64.b64decode(item.b64_json)
-                            image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-                            task_tensors.append(self.pil_to_tensor(image))
+                            try:
+                                image_bytes = base64.b64decode(item.b64_json)
+                                image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                                task_tensors.append(self.pil_to_tensor(image))
+                            except Exception as e:
+                                print(f"Base64解码失败: {e}")
 
                 return task_tensors, "\n".join(task_log)
 
+            except asyncio.CancelledError:
+                raise  # 必须抛出
             except Exception as e:
                 error_msg = f"❌ 任务 {task_index + 1} 失败: {str(e)}"
                 print(error_msg)
-                # 返回红色占位图
-                error_img = self.pil_to_tensor(Image.new("RGB", (512, 512), color="red"))
-                return [error_img], error_msg
+                # 失败时返回 None，不返回错误图片
+                return None, error_msg
 
-        # 并发执行所有任务
-        tasks = [process_single_batch(i) for i in range(batch_size)]
-        results = await asyncio.gather(*tasks)
+        # --- 4. 带有重试机制的主循环 ---
 
-        # 汇总结果
-        all_tensors = []
-        all_logs = [f"📊 并发报告: 总任务数 {batch_size}\n"]
+        all_logs = []
+        final_valid_tensors = []
 
-        for tensors, log in results:
-            all_tensors.extend(tensors)
-            all_logs.append(log)
+        # 总尝试次数 = 1 (首次) + 重试次数
+        total_attempts = 1 + max_retries
 
-        # 最终合并 Tensor
-        if not all_tensors:
+        for attempt in range(total_attempts):
+            is_retry = attempt > 0
+            if is_retry:
+                retry_msg = f"\n🔄 第 {attempt} 次重试 (共 {max_retries} 次)..."
+                print(retry_msg)
+                all_logs.append(retry_msg)
+                # 稍微改变一下 seed，防止因特定 seed 导致的失败
+                current_batch_seed = seed + (attempt * 100)
+            else:
+                current_batch_seed = seed
+
+            # 创建任务列表
+            tasks = [asyncio.create_task(process_single_batch(i, current_batch_seed + i)) for i in range(batch_size)]
+
+            print(f"⏳ [第{attempt + 1}轮] 开始并发执行，超时设定: {timeout}秒...")
+
+            # 等待结果
+            done, pending = await asyncio.wait(tasks, timeout=timeout)
+
+            # 取消超时任务
+            if pending:
+                timeout_msg = f"⚠️ [第{attempt + 1}轮] {len(pending)} 个任务超时被取消。"
+                print(timeout_msg)
+                all_logs.append(timeout_msg)
+                for task in pending:
+                    task.cancel()
+
+            # 收集本轮结果
+            batch_tensors = []
+            for task in done:
+                try:
+                    result = task.result()
+                    if result is not None:
+                        tensors, log = result
+                        if tensors:  # 确保 tensors 列表不为空
+                            batch_tensors.extend(tensors)
+                        all_logs.append(log)
+                    else:
+                        # 任务内部捕获了异常并返回 None
+                        pass
+                except Exception as e:
+                    all_logs.append(f"❌ 任务异常: {str(e)}")
+
+            # 检查本轮是否成功
+            if len(batch_tensors) > 0:
+                final_valid_tensors = batch_tensors
+                success_msg = f"✅ [第{attempt + 1}轮] 成功获取 {len(final_valid_tensors)} 张图片。"
+                print(success_msg)
+                all_logs.append(success_msg)
+                break  # 成功则跳出重试循环
+            else:
+                fail_msg = f"❌ [第{attempt + 1}轮] 未获取任何有效图片。"
+                print(fail_msg)
+                all_logs.append(fail_msg)
+                if attempt < total_attempts - 1:
+                    await asyncio.sleep(2)  # 重试前等待2秒
+
+        # --- 5. 最终结果处理 ---
+
+        if not final_valid_tensors:
+            err_final = "⚠️ 所有尝试（包括重试）均已失败，未生成有效图片。返回黑色占位图。"
+            print(err_final)
+            all_logs.append(err_final)
             final_tensor = self.pil_to_tensor(Image.new("RGB", (512, 512), color="black"))
         else:
-            final_tensor = torch.cat(all_tensors, dim=0)
+            # 只要有图，就只返回成功的图
+            final_tensor = torch.cat(final_valid_tensors, dim=0)
 
         return (final_tensor, "\n".join(all_logs))
