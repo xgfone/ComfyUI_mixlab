@@ -157,11 +157,11 @@ class SeedreamImageGenerateConcurrent:
             print(f"下载图片失败: {e}")
             return None  # 下载失败返回 None，不返回黑色占位符
 
-    def initialize_client(self, base_url):
+    def initialize_client(self, base_url, timeout=None, max_retries=None):
         api_key = os.environ.get("ARK_API_KEY")
         if not api_key:
             raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
-        self.client = Ark(base_url=base_url, api_key=api_key.strip())
+        self.client = Ark(base_url=base_url, api_key=api_key.strip(), timeout=timeout, max_retries=max_retries)
 
     async def generate_images(
         self,
@@ -203,7 +203,7 @@ class SeedreamImageGenerateConcurrent:
         if not validation_passed:
             raise ValueError("输入验证失败")
 
-        self.initialize_client(base_url)
+        self.initialize_client(base_url, timeout=timeout, max_retries=max_retries)
 
         # --- 2. 准备输入图像 ---
         input_images = [img for img in [image1, image2, image3, image4, image5] if img is not None]
