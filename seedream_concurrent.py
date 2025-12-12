@@ -51,8 +51,12 @@ class SeedreamImageGenerateConcurrent:
                 "use_local_images": ("BOOLEAN", {"default": True, "tooltip": "使用本地图像（Base64格式）"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 18446744073709551615, "step": 1}),
                 "enable_auto_retry": ("BOOLEAN", {"default": True, "tooltip": "启用输入验证的自动重试"}),
-                "max_retries": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "最大重试的次数。"}),
+                "max_retries": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "协程最大重试次数。"}),
                 "timeout": ("INT", {"default": 70, "min": 10, "max": 300, "step": 1, "tooltip": "最大等待时间(秒)。"}),
+                "ARK_max_retries": (
+                    "INT",
+                    {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "单次任务最大重试次数。"},
+                ),
             },
             "optional": {"image2": ("IMAGE",), "image3": ("IMAGE",), "image4": ("IMAGE",), "image5": ("IMAGE",)},
         }
@@ -181,6 +185,7 @@ class SeedreamImageGenerateConcurrent:
         use_local_images,
         seed,
         enable_auto_retry,
+        ARK_max_retries,
         image2=None,
         image3=None,
         image4=None,
@@ -203,7 +208,7 @@ class SeedreamImageGenerateConcurrent:
         if not validation_passed:
             raise ValueError("输入验证失败")
 
-        self.initialize_client(base_url, timeout=timeout, max_retries=max_retries)
+        self.initialize_client(base_url, timeout=timeout, max_retries=ARK_max_retries)
 
         # --- 2. 准备输入图像 ---
         input_images = [img for img in [image1, image2, image3, image4, image5] if img is not None]
