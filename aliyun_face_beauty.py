@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import io
+import os
 
 import numpy as np
 import requests
@@ -45,6 +46,13 @@ class AliyunFaceBeautyNode:
     CATEGORY = "Aliyun/FaceBody"
 
     def create_client(self, access_key_id, access_key_secret, region_id="cn-shanghai"):
+        if not access_key_id or not access_key_secret:
+            access_key_id = os.environ.get("ALIYUN_APPKEY", "")
+            access_key_secret = os.environ.get("ALIYUN_SECRET", "")
+
+        if not access_key_id or not access_key_secret:
+            raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
+
         config = Config(access_key_id=access_key_id, access_key_secret=access_key_secret)
         config.endpoint = f"facebody.{region_id}.aliyuncs.com"
         return Client(config)
