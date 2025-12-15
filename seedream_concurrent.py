@@ -53,12 +53,14 @@ class SeedreamImageGenerateConcurrent:
                 "enable_auto_retry": ("BOOLEAN", {"default": True, "tooltip": "启用输入验证的自动重试"}),
                 "max_retries": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "协程最大重试次数。"}),
                 "timeout": ("INT", {"default": 70, "min": 10, "max": 300, "step": 1, "tooltip": "最大等待时间(秒)。"}),
-                "ARK_max_retries": (
-                    "INT",
-                    {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "单次任务最大重试次数。"},
-                ),
             },
-            "optional": {"image2": ("IMAGE",), "image3": ("IMAGE",), "image4": ("IMAGE",), "image5": ("IMAGE",)},
+            "optional": {
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "ARK_max_retries": ("INT", {"min": 0, "max": 5, "step": 1, "tooltip": "单次任务最大重试次数。"}),
+            },
         }
 
     RETURN_TYPES = ("IMAGE", "STRING")
@@ -185,7 +187,7 @@ class SeedreamImageGenerateConcurrent:
         use_local_images,
         seed,
         enable_auto_retry,
-        ARK_max_retries,
+        ARK_max_retries=0,
         image2=None,
         image3=None,
         image4=None,
