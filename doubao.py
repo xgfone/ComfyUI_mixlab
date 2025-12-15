@@ -257,6 +257,9 @@ class DoubaoSingleTurnChatNodeSDKv2:
     @classmethod
     def INPUT_TYPES(cls):
         cfg = CONFIG
+        max_tokens = int(cfg.get("default_max_tokens", 1024))
+        temperature = float(cfg.get("default_temperature", 0.7))
+        top_p = float(cfg.get("default_top_p", 0.95))
         return {
             "required": {
                 "model": (
@@ -267,59 +270,16 @@ class DoubaoSingleTurnChatNodeSDKv2:
                         "tooltip": "Ark inference endpoint id (e.g., ep-xxx). Some tenants may allow model-name.",
                     },
                 ),
-                "user_prompt": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "multiline": True,
-                        "placeholder": "Ask Doubao something...",
-                    },
-                ),
-                "max_tokens": (
-                    "INT",
-                    {
-                        "default": int(cfg.get("default_max_tokens", 1024)),
-                        "min": 1,
-                        "max": 8192,
-                        "step": 1,
-                    },
-                ),
-                "temperature": (
-                    "FLOAT",
-                    {
-                        "default": float(cfg.get("default_temperature", 0.7)),
-                        "min": 0.0,
-                        "max": 2.0,
-                        "step": 0.01,
-                    },
-                ),
-                "top_p": (
-                    "FLOAT",
-                    {
-                        "default": float(cfg.get("default_top_p", 0.95)),
-                        "min": 0.0,
-                        "max": 1.0,
-                        "step": 0.01,
-                    },
-                ),
-                "deep_thinking": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                    },
-                ),
-                "max_retries": ("INT", {"default": 2, "tooltip": "最大重试次数"}),
-                "timeout": ("INT", {"default": 600, "tooltip": "超时时间，单位秒"}),
+                "user_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "Ask Doubao something..."}),
+                "max_tokens": ("INT", {"default": max_tokens, "min": 1, "max": 8192, "step": 1}),
+                "temperature": ("FLOAT", {"default": temperature, "min": 0.0, "max": 2.0, "step": 0.01}),
+                "top_p": ("FLOAT", {"default": top_p, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "deep_thinking": ("BOOLEAN", {"default": False}),
             },
             "optional": {
-                "system_prompt": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "multiline": True,
-                        "placeholder": "Optional system prompt (role instruction)...",
-                    },
-                ),
+                "timeout": ("INT", {"default": 600, "tooltip": "超时时间，单位秒"}),
+                "max_retries": ("INT", {"default": 2, "tooltip": "最大重试次数"}),
+                "system_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "system prompt"}),
                 "image_1": ("IMAGE",),
                 "image_2": ("IMAGE",),
                 "image_3": ("IMAGE",),
