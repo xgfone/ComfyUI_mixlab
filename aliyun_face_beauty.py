@@ -82,9 +82,6 @@ class AliyunFaceBeautyNode:
         if not ALIYUN_SDK_AVAILABLE:
             raise ImportError("Aliyun SDK is not installed.")
 
-        if not access_key_id or not access_key_secret:
-            raise ValueError("Access Key ID and Secret are required.")
-
         client = self.create_client(access_key_id, access_key_secret)
         runtime = RuntimeOptions()
 
