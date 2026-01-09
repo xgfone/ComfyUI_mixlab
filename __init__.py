@@ -1,4 +1,5 @@
 from .aliyun_face_beauty import AliyunFaceBeautyNode
+from .auto_gamma import AutoGamma
 from .chroma_key import ChromaKeyNode
 from .color_ratio_node import ColorRatioCalculator
 from .doubao import DoubaoSingleTurnChatNodeSDKv2
@@ -11,6 +12,7 @@ from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
 
 NODE_CLASS_MAPPINGS = {
+    "AutoGamma": AutoGamma,
     "ChromaKey": ChromaKeyNode,
     "MaskSorter": MaskSorter,
     "FaceToMaskCopy": FaceToMaskCopy,
@@ -26,6 +28,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "AutoGamma": "Auto Gamma",
     "ColorRatioCalculator": "Color Ratio Calculator",
     "ChromaKey": "Chroma Key",
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
