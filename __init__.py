@@ -1,4 +1,6 @@
 from .aliyun_face_beauty import AliyunFaceBeautyNode
+from .chroma_key import ChromaKeyNode
+from .color_ratio_node import ColorRatioCalculator
 from .doubao import DoubaoSingleTurnChatNodeSDKv2
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
@@ -9,11 +11,13 @@ from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
 
 NODE_CLASS_MAPPINGS = {
+    "ChromaKey": ChromaKeyNode,
     "MaskSorter": MaskSorter,
     "FaceToMaskCopy": FaceToMaskCopy,
     "RasterCardMaker": RasterCardMaker,
     "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
+    "ColorRatioCalculator": ColorRatioCalculator,
     "LoadImageAndMaskFromUrl": LoadImageAndMaskFromUrl,
     "GarmentCategoryMapper": GarmentCategoryMapper,
     "GarmentCategoryMapperBatch": GarmentCategoryMapperBatch,
@@ -22,6 +26,8 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "ColorRatioCalculator": "Color Ratio Calculator",
+    "ChromaKey": "Chroma Key",
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
     "FaceToMaskCopy": "Face To Mask(Copy)",
     "RasterCardMaker": "Raster Card Maker",
