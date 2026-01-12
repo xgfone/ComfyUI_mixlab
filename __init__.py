@@ -10,6 +10,7 @@ from .mask_sort import MaskSorter
 from .prompt_logo_cleaner import PromptLogoCleaner
 from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
+from .seedream_node_executor import SeedreamImageGenerateExecutor
 
 NODE_CLASS_MAPPINGS = {
     "AutoGamma": AutoGamma,
@@ -25,6 +26,7 @@ NODE_CLASS_MAPPINGS = {
     "GarmentCategoryMapperBatch": GarmentCategoryMapperBatch,
     "DoubaoSingleTurnChatNodeSDKv2": DoubaoSingleTurnChatNodeSDKv2,
     "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
+    "SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -41,4 +43,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "GarmentCategoryMapperBatch": "Garment Category Mapper (Batch)",
     "DoubaoSingleTurnChatNodeSDKv2": "Doubao Chat (Single Turn, Ark SDK)",
     "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
+    "SeedreamImageGenerateExecutor": "Seedream Image Generate Executor",
 }
