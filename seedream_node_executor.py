@@ -313,7 +313,8 @@ class SeedreamImageGenerateExecutor:
         tasks = []
 
         # 任务1：必跑（因为 image1 / prompt 是必填）
-        task1_images = [img for img in [image1, image2, image3, image4, image5, image6] if img is not None]
+        images = [image1, image2, image3, image4, image5, image6]
+        task1_images = [img for img in images if img is not None and img.shape[1] >= 14]
         tasks.append(
             {
                 "index": 1,
@@ -327,7 +328,7 @@ class SeedreamImageGenerateExecutor:
             if p is None:
                 p = ""
             p = p.strip()
-            imgs = [img for img in [img1, img2, img3] if img is not None]
+            imgs = [img for img in [img1, img2, img3] if img is not None and img.shape[1] >= 14]
             if p != "" and len(imgs) > 0:
                 tasks.append(
                     {
