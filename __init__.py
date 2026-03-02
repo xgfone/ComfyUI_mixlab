@@ -1,4 +1,5 @@
 from .aliyun_face_beauty import AliyunFaceBeautyNode
+from .aliyun_image_seg import AliyunCommonSegmentation
 from .auto_gamma import AutoGamma
 from .chroma_key import ChromaKeyNode
 from .color_ratio_node import ColorRatioCalculator
@@ -27,7 +28,9 @@ NODE_CLASS_MAPPINGS = {
     "DoubaoSingleTurnChatNodeSDKv2": DoubaoSingleTurnChatNodeSDKv2,
     "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
     "SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor,
+    "AliyunCommonSegmentation": AliyunCommonSegmentation,
 }
+
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "AutoGamma": "Auto Gamma",
@@ -44,4 +47,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DoubaoSingleTurnChatNodeSDKv2": "Doubao Chat (Single Turn, Ark SDK)",
     "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
     "SeedreamImageGenerateExecutor": "Seedream Image Generate Executor",
+    "AliyunCommonSegmentation": "Aliyun Common Segmentation (crop/mask/whiteBK)",
 }

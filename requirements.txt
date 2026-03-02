@@ -10,7 +10,8 @@ volcengine-python-sdk[ark]
 # seedream
 aiohttp
 
-# alibabacloud_tea_openapi
+# aliyun
 alibabacloud_facebody20191230
+alibabacloud_imageseg20191230
 alibabacloud_tea_openapi
 alibabacloud_tea_util
