@@ -12,6 +12,7 @@ from .prompt_logo_cleaner import PromptLogoCleaner
 from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
 from .seedream_node_executor import SeedreamImageGenerateExecutor
+from .split_string import SplitString
 
 NODE_CLASS_MAPPINGS = {
     "AutoGamma": AutoGamma,
@@ -29,6 +30,7 @@ NODE_CLASS_MAPPINGS = {
     "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
     "SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor,
     "AliyunCommonSegmentation": AliyunCommonSegmentation,
+    "SplitString": SplitString,
 }
 
 
@@ -48,4 +50,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
     "SeedreamImageGenerateExecutor": "Seedream Image Generate Executor",
     "AliyunCommonSegmentation": "Aliyun Common Segmentation (crop/mask/whiteBK)",
+    "SplitString": "Split String",
 }
