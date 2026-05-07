@@ -90,6 +90,16 @@ class SeedreamImageGenerateExecutor:
                 "task6_image1": ("IMAGE",),
                 "task6_image2": ("IMAGE",),
                 "task6_image3": ("IMAGE",),
+                "ignore_failure": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 6,
+                        "step": 1,
+                        "tooltip": "最多允许失败的任务数。失败数超过该值时，才会统一重试失败任务。",
+                    },
+                ),
             },
         }
 
@@ -301,20 +311,29 @@ class SeedreamImageGenerateExecutor:
         task6_image1=None,
         task6_image2=None,
         task6_image3=None,
+        ignore_failure=0,
     ):
         """
         支持最多 6 个任务的并行执行：
-        - 任务1：prompt + image1(+image2~image6)
-        - 任务2~6：promptX + taskX_image1~3
-        使用 ThreadPoolExecutor 并行调用 Seedream 接口。
+        - 单个任务失败时，只记录失败，不返回占位图，不中断其它任务。
+        - 只有所有任务最终都失败，且没有任何成功图片时，才返回 1 张占位图，避免 ComfyUI 报错。
+        - ignore_failure 表示最多容忍失败任务数。首轮失败数超过该值时，才统一重试失败任务。
         """
+        try:
+            ignore_failure = int(ignore_failure)
+        except Exception:
+            ignore_failure = 0
+        ignore_failure = max(0, min(ignore_failure, 6))
 
         # ========== 1. 组装任务列表 ==========
         tasks = []
 
+        def is_valid_image_tensor(img):
+            return img is not None and hasattr(img, "shape") and len(img.shape) >= 3 and img.shape[1] >= 14
+
         # 任务1：必跑（因为 image1 / prompt 是必填）
         images = [image1, image2, image3, image4, image5, image6]
-        task1_images = [img for img in images if img is not None and img.shape[1] >= 14]
+        task1_images = [img for img in images if is_valid_image_tensor(img)]
         tasks.append(
             {
                 "index": 1,
@@ -328,7 +347,7 @@ class SeedreamImageGenerateExecutor:
             if p is None:
                 p = ""
             p = p.strip()
-            imgs = [img for img in [img1, img2, img3] if img is not None and img.shape[1] >= 14]
+            imgs = [img for img in [img1, img2, img3] if is_valid_image_tensor(img)]
             if p != "" and len(imgs) > 0:
                 tasks.append(
                     {
@@ -345,13 +364,14 @@ class SeedreamImageGenerateExecutor:
         add_task_if_valid(6, prompt6, task6_image1, task6_image2, task6_image3)
 
         if not tasks:
-            raise ValueError("没有可执行的任务，请至少提供任务1的 prompt 和 image1。")
-
-        # 根据用户设置决定是否启用上层重试逻辑
-        max_attempts = self.max_retries + 1 if enable_auto_retry else 1
+            # 这里仍返回占位图，避免无任务时 ComfyUI 直接异常
+            return (
+                [self.create_placeholder_tensor("red")],
+                "❌ 没有可执行的任务，请至少提供任务1的 prompt 和 image1。",
+            )
 
         # ========== 2. 定义单任务执行函数（在线程里跑） ==========
-        def run_single_task(task):
+        def run_single_task(task, attempt=1):
             t_idx = task["index"]
             t_prompt = task["prompt"]
             t_images = task["images"]
@@ -364,101 +384,169 @@ class SeedreamImageGenerateExecutor:
             t_image5 = t_images[4] if len(t_images) > 4 else None
             t_image6 = t_images[5] if len(t_images) > 5 else None
 
-            last_error = None
+            try:
+                # 输入校验不再在单任务内部 sleep+重试；失败直接记入失败列表
+                is_valid, _ = self.validate_input_data(t_image1, retry_count=1)
+                if not is_valid:
+                    self.validate_input_data(t_image1, retry_count=1)
 
-            for retry_count in range(max_attempts):
-                try:
-                    # 输入校验（只对 image1 做智能验证）
-                    is_valid, error_type = self.validate_input_data(t_image1, retry_count)
+                if attempt > 1:
+                    print(f"🔁 开始重试图像生成 - 任务 {t_idx} (第 {attempt} 次尝试)")
+                else:
+                    print(f"🚀 开始执行图像生成 - 任务 {t_idx}")
 
-                    if not is_valid:
-                        if enable_auto_retry and retry_count < self.max_retries:
-                            # 有机会重试
-                            continue
-                        else:
-                            # 最终失败，抛出校验异常
-                            self.validate_input_data(t_image1, retry_count)
+                output_tensors, text_output = self._execute_generation(
+                    t_prompt,
+                    t_image1,
+                    model,
+                    aspect_ratio,
+                    sequential_image_generation,
+                    max_images,
+                    response_format,
+                    watermark,
+                    stream,
+                    base_url,
+                    use_local_images,
+                    seed,
+                    enable_auto_retry,
+                    timeout,
+                    t_image2,
+                    t_image3,
+                    t_image4,
+                    t_image5,
+                    t_image6,
+                )
 
-                    if retry_count > 0 and enable_auto_retry:
-                        print(f"✅ 任务 {t_idx} 重试成功！开始执行图像生成 (尝试 {retry_count + 1}/{max_attempts})")
-                    else:
-                        print(f"🚀 开始执行图像生成 - 任务 {t_idx}")
-
-                    # 调用原有单任务的核心执行逻辑
-                    output_tensors, text_output = self._execute_generation(
-                        t_prompt,
-                        t_image1,
-                        model,
-                        aspect_ratio,
-                        sequential_image_generation,
-                        max_images,
-                        response_format,
-                        watermark,
-                        stream,
-                        base_url,
-                        use_local_images,
-                        seed,
-                        enable_auto_retry,
-                        timeout,
-                        t_image2,
-                        t_image3,
-                        t_image4,
-                        t_image5,
-                        t_image6,
-                    )
-
+                # _execute_generation 失败时会返回空图片列表和错误文本。
+                # 空图片列表视为任务失败，避免把任何占位图/空结果混入部分成功输出。
+                if not output_tensors:
                     return {
                         "index": t_idx,
-                        "images": output_tensors,
-                        "text": text_output,
+                        "success": False,
+                        "images": [],
+                        "text": "",
+                        "error": text_output or "未返回任何图片",
                     }
 
-                except Exception as e:
-                    last_error = e
-                    if enable_auto_retry and retry_count < self.max_retries:
-                        print(f"任务 {t_idx} 执行失败 (尝试 {retry_count + 1}/{max_attempts}): {str(e)}")
-                        print(f"等待 {self.retry_delay} 秒后重试任务 {t_idx}...")
-                        time.sleep(self.retry_delay)
-                        continue
-                    else:
-                        print(f"任务 {t_idx} 最终失败: {str(e)}")
-                        raise e
+                return {
+                    "index": t_idx,
+                    "success": True,
+                    "images": output_tensors,
+                    "text": text_output,
+                    "error": None,
+                }
 
-        # ========== 3. 使用线程池并行执行所有任务 ==========
-        all_results = []
-        max_workers = min(len(tasks), 6)  # 最多 6 个并行
+            except Exception as e:
+                # 单任务异常只记录为失败，不继续向外抛，避免 ComfyUI / 后端直接中断。
+                error_text = str(e)
+                print(f"任务 {t_idx} 失败 (第 {attempt} 次尝试): {error_text}")
+                return {
+                    "index": t_idx,
+                    "success": False,
+                    "images": [],
+                    "text": "",
+                    "error": error_text,
+                }
 
-        print(f"🔧 并行执行 Seedream 任务数: {len(tasks)} (max_workers={max_workers})")
+        def run_tasks_parallel(task_list, attempt=1):
+            results = []
+            max_workers = min(len(task_list), 6)
+            print(f"🔧 并行执行 Seedream 任务数: {len(task_list)} (max_workers={max_workers}, attempt={attempt})")
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_idx = {executor.submit(run_single_task, task, attempt): task["index"] for task in task_list}
+                for future in as_completed(future_to_idx):
+                    t_idx = future_to_idx[future]
+                    try:
+                        results.append(future.result())
+                    except Exception as e:
+                        # 兜底：理论上 run_single_task 已经吃掉异常；这里再兜一次，保证外层不抛异常。
+                        error_text = str(e)
+                        print(f"任务 {t_idx} 线程执行异常，已记录为失败: {error_text}")
+                        results.append(
+                            {
+                                "index": t_idx,
+                                "success": False,
+                                "images": [],
+                                "text": "",
+                                "error": error_text,
+                            }
+                        )
+            return results
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_idx = {executor.submit(run_single_task, task): task["index"] for task in tasks}
+        # ========== 3. 首轮并行执行：失败不抛异常，不返回占位图 ==========
+        first_results = run_tasks_parallel(tasks, attempt=1)
+        success_results = [r for r in first_results if r["success"] and r["images"]]
+        failed_results = [r for r in first_results if not r["success"]]
 
-            for future in as_completed(future_to_idx):
-                t_idx = future_to_idx[future]
-                try:
-                    result = future.result()
-                    all_results.append(result)
-                except Exception as e:
-                    # 某个任务异常，整体抛出，让 ComfyUI 显示错误
-                    raise e
+        # ========== 4. 超过 ignore_failure 时，才统一重试失败任务 ==========
+        retry_results = []
+        if enable_auto_retry and len(failed_results) > ignore_failure:
+            failed_indexes = {r["index"] for r in failed_results}
+            retry_tasks = [task for task in tasks if task["index"] in failed_indexes]
+            print(
+                f"⚠️ 首轮失败任务数 {len(failed_results)} 超过 ignore_failure={ignore_failure}，"
+                f"开始统一重试失败任务: {sorted(failed_indexes)}"
+            )
+            time.sleep(self.retry_delay)
+            retry_results = run_tasks_parallel(retry_tasks, attempt=2)
 
-        if not all_results:
-            return ([], "⚠️ 未执行任何任务（可能所有任务都校验失败）")
+            # 重试成功的加入成功结果；重试失败的替换失败记录
+            retry_success = [r for r in retry_results if r["success"] and r["images"]]
+            retry_failed = [r for r in retry_results if not r["success"]]
 
-        # ========== 4. 按任务顺序合并输出 ==========
-        all_results.sort(key=lambda r: r["index"])
+            success_indexes = {r["index"] for r in retry_success}
+            success_results.extend(retry_success)
+            failed_results = [r for r in failed_results if r["index"] not in success_indexes]
+
+            retry_failed_by_index = {r["index"]: r for r in retry_failed}
+            failed_results = [retry_failed_by_index.get(r["index"], r) for r in failed_results]
+        elif not enable_auto_retry and len(failed_results) > ignore_failure:
+            print(
+                f"⚠️ 首轮失败任务数 {len(failed_results)} 超过 ignore_failure={ignore_failure}，但 enable_auto_retry=False，跳过重试。"
+            )
+        else:
+            print(f"✅ 首轮失败任务数 {len(failed_results)} 未超过 ignore_failure={ignore_failure}，不重试失败任务。")
+
+        # ========== 5. 合并输出；只有全部失败才返回占位图 ==========
+        success_results.sort(key=lambda r: r["index"])
+        failed_results.sort(key=lambda r: r["index"])
 
         all_output_tensors = []
         all_result_texts = []
 
-        for r in all_results:
-            t_idx = r["index"]
+        for r in success_results:
             all_output_tensors.extend(r["images"])
-            all_result_texts.append(f"===== 任务 {t_idx} =====\n{r['text']}")
+            all_result_texts.append(f"===== 任务 {r['index']} 成功 =====\n{r['text']}")
+
+        if failed_results:
+            fail_lines = [
+                "===== 失败任务汇总 =====",
+                f"失败任务数: {len(failed_results)} / {len(tasks)}",
+                f"ignore_failure: {ignore_failure}",
+                f"是否已触发重试: {'是' if retry_results else '否'}",
+                "",
+            ]
+            for r in failed_results:
+                fail_lines.append(f"任务 {r['index']} 失败: {r['error']}")
+            all_result_texts.append("\n".join(fail_lines))
+
+        if not all_output_tensors:
+            # 所有任务全部失败，并且重试后仍没有任何成功图片，才返回占位图。
+            text_output = (
+                "\n\n".join(all_result_texts)
+                if all_result_texts
+                else "❌ 所有任务均失败，返回占位图以避免 ComfyUI 报错。"
+            )
+            text_output = "❌ 所有任务均失败，返回占位图以避免 ComfyUI 报错。\n\n" + text_output
+            return ([self.create_placeholder_tensor("red")], text_output)
 
         text_output = "\n\n".join(all_result_texts)
-
         return (all_output_tensors, text_output)
+
+    def create_placeholder_tensor(self, color="red"):
+        """仅在所有任务均失败或没有任务时返回占位图，避免 ComfyUI 报错。"""
+        placeholder = Image.new("RGB", (512, 512), color=color)
+        return self.pil_to_tensor(placeholder)
 
     def _execute_generation(
         self,
@@ -604,7 +692,6 @@ class SeedreamImageGenerateExecutor:
             result_info.append(f"   🌐 API地址: {base_url}")
 
             if not output_tensors:
-                # Return a placeholder if no images generated
                 placeholder = Image.new("RGB", (512, 512), color="black")
                 output_tensors = [self.pil_to_tensor(placeholder)]
                 result_info.append("⚠️ 未生成图像，返回占位符")
@@ -623,10 +710,7 @@ class SeedreamImageGenerateExecutor:
             if seed > 2147483647:
                 normalized_seed = seed % 2147483647
 
-            # Return a placeholder error image with error text
-            error_img = Image.new("RGB", (512, 512), color="red")
-
-            # Create detailed error text output with specific troubleshooting
+            # 不在单任务失败时创建或返回占位图；只生成错误文本，由外层统一决定是否兜底。
             error_text_parts = ["❌ 图像生成失败", "", f"🔍 错误信息: {error_msg}", ""]
 
             # 根据错误类型提供具体的解决建议
@@ -720,4 +804,5 @@ class SeedreamImageGenerateExecutor:
             if "image1" in locals() and image1 is not None:
                 print(f"  image1 形状: {getattr(image1, 'shape', 'N/A')}")
 
-            return ([self.pil_to_tensor(error_img)], error_text)
+            # 返回空图片列表，表示该任务失败；不要向外抛异常，避免后端无法处理。
+            return ([], error_text)
