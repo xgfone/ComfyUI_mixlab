@@ -589,39 +589,39 @@ class SeedreamImageGenerateExecutor:
             #
             # 测试完成后，删除或注释本段即可恢复真实调用
             # =========================
-            # def _mock_seedream_result_by_prompt():
-            #     test_prompt = str(prompt or "")
+            def _mock_seedream_result_by_prompt():
+                test_prompt = str(prompt or "")
 
-            #     if "[TEST_TIMEOUT]" in test_prompt:
-            #         raise TimeoutError("模拟超时失败: request timed out")
+                if "[TEST_TIMEOUT]" in test_prompt:
+                    raise TimeoutError("模拟超时失败: request timed out")
 
-            #     if "[TEST_IMAGE_TOO_LARGE]" in test_prompt:
-            #         raise RuntimeError("模拟图片过大失败: image size is too large")
+                if "[TEST_IMAGE_TOO_LARGE]" in test_prompt:
+                    raise RuntimeError("模拟图片过大失败: image size is too large")
 
-            #     if "[TEST_SUCCESS]" in test_prompt:
-            #         # 使用稳定可访问的预制图片 URL
-            #         mock_url = "https://ark-project.tos-cn-beijing.volces.com/doc_image/seedream4_imagesToimages_1.png"
+                if "[TEST_SUCCESS]" in test_prompt:
+                    # 使用稳定可访问的预制图片 URL
+                    mock_url = "https://ark-project.tos-cn-beijing.volces.com/doc_image/seedream4_imagesToimages_1.png"
 
-            #         result_info = [
-            #             "🎨 生成信息:",
-            #             f"📝 提示词: {prompt}",
-            #             f"🔧 模型: {model}",
-            #             f"📐 宽高比: {aspect_ratio}",
-            #             "⚡ 执行状态: 测试成功（未真实调用 Seedream API）",
-            #             "",
-            #             "📷 图像 1:",
-            #             f"   🔗 URL: {mock_url}",
-            #             "   📏 尺寸: mock",
-            #         ]
+                    result_info = [
+                        "🎨 生成信息:",
+                        f"📝 提示词: {prompt}",
+                        f"🔧 模型: {model}",
+                        f"📐 宽高比: {aspect_ratio}",
+                        "⚡ 执行状态: 测试成功（未真实调用 Seedream API）",
+                        "",
+                        "📷 图像 1:",
+                        f"   🔗 URL: {mock_url}",
+                        "   📏 尺寸: mock",
+                    ]
 
-            #         tensor = self.download_image_from_url(mock_url)
-            #         return ([tensor], "\n".join(result_info))
+                    tensor = self.download_image_from_url(mock_url)
+                    return ([tensor], "\n".join(result_info))
 
-            #     return None
+                return None
 
-            # mock_result = _mock_seedream_result_by_prompt()
-            # if mock_result is not None:
-            #     return mock_result
+            mock_result = _mock_seedream_result_by_prompt()
+            if mock_result is not None:
+                return mock_result
 
             # 标准化seed参数 - 将大的seed值映射到有效范围内
             normalized_seed = seed
