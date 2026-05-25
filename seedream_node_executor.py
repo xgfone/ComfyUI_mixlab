@@ -101,6 +101,21 @@ class SeedreamImageGenerateExecutor:
                         "tooltip": "最多允许失败的任务数。失败数 <= ignore_failure 时忽略失败任务；失败数 > ignore_failure 时输出正常生成图片，并为每个失败任务补 1 张占位图。",
                     },
                 ),
+                "task2_image4": ("IMAGE",),
+                "task2_image5": ("IMAGE",),
+                "task2_image_add": ("IMAGE",),
+                "task3_image4": ("IMAGE",),
+                "task3_image5": ("IMAGE",),
+                "task3_image_add": ("IMAGE",),
+                "task4_image4": ("IMAGE",),
+                "task4_image5": ("IMAGE",),
+                "task4_image_add": ("IMAGE",),
+                "task5_image4": ("IMAGE",),
+                "task5_image5": ("IMAGE",),
+                "task5_image_add": ("IMAGE",),
+                "task6_image4": ("IMAGE",),
+                "task6_image5": ("IMAGE",),
+                "task6_image_add": ("IMAGE",),
             },
         }
 
@@ -331,6 +346,21 @@ class SeedreamImageGenerateExecutor:
         task6_image2=None,
         task6_image3=None,
         ignore_failure=0,
+        task2_image4=None,
+        task2_image5=None,
+        task2_image_add=None,
+        task3_image4=None,
+        task3_image5=None,
+        task3_image_add=None,
+        task4_image4=None,
+        task4_image5=None,
+        task4_image_add=None,
+        task5_image4=None,
+        task5_image5=None,
+        task5_image_add=None,
+        task6_image4=None,
+        task6_image5=None,
+        task6_image_add=None,
     ):
         """
         支持最多 6 个任务的并行执行：
@@ -343,7 +373,7 @@ class SeedreamImageGenerateExecutor:
         tasks = []
 
         # 任务1：必跑（因为 image1 / prompt 是必填）
-        images = [image1, image2, image3, image4, image5, image6]
+        images = [image1, image4, image2, image3, image5, image6]
         task1_images = [img for img in images if img is not None and img.shape[1] >= 14]
         tasks.append(
             {
@@ -354,11 +384,11 @@ class SeedreamImageGenerateExecutor:
         )
 
         # 任务2~6：如果 promptX 非空且至少有一张图，就加入任务
-        def add_task_if_valid(idx, p, img1, img2, img3):
+        def add_task_if_valid(idx, p, img1, img2, img3, img4, img5, img6):
             if p is None:
                 p = ""
             p = p.strip()
-            imgs = [img for img in [img1, img2, img3] if img is not None and img.shape[1] >= 14]
+            imgs = [img for img in [img1, img2, img3, img4, img5, img6] if img is not None and img.shape[1] >= 14]
             if p != "" and len(imgs) > 0:
                 tasks.append(
                     {
@@ -368,11 +398,21 @@ class SeedreamImageGenerateExecutor:
                     }
                 )
 
-        add_task_if_valid(2, prompt2, task2_image1, task2_image2, task2_image3)
-        add_task_if_valid(3, prompt3, task3_image1, task3_image2, task3_image3)
-        add_task_if_valid(4, prompt4, task4_image1, task4_image2, task4_image3)
-        add_task_if_valid(5, prompt5, task5_image1, task5_image2, task5_image3)
-        add_task_if_valid(6, prompt6, task6_image1, task6_image2, task6_image3)
+        add_task_if_valid(
+            2, prompt2, task2_image1, task2_image_add, task2_image2, task2_image3, task2_image4, task2_image5
+        )
+        add_task_if_valid(
+            3, prompt3, task3_image1, task3_image_add, task3_image2, task3_image3, task3_image4, task3_image5
+        )
+        add_task_if_valid(
+            4, prompt4, task4_image1, task4_image_add, task4_image2, task4_image3, task4_image4, task4_image5
+        )
+        add_task_if_valid(
+            5, prompt5, task5_image1, task5_image_add, task5_image2, task5_image3, task5_image4, task5_image5
+        )
+        add_task_if_valid(
+            6, prompt6, task6_image1, task6_image_add, task6_image2, task6_image3, task6_image4, task6_image5
+        )
 
         if not tasks:
             raise ValueError("没有可执行的任务，请至少提供任务1的 prompt 和 image1。")
