@@ -3,6 +3,7 @@ from .aliyun_image_seg import AliyunCommonSegmentation
 from .auto_gamma import AutoGamma
 from .chroma_key import ChromaKeyNode
 from .color_ratio_node import ColorRatioCalculator
+from .corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
 from .doubao import DoubaoSingleTurnChatNodeSDKv2
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
@@ -13,8 +14,13 @@ from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
 from .seedream_node_executor import SeedreamImageGenerateExecutor
 from .split_string import SplitString
+from .zho_text_image import Text_Image_Multiline_Zho_autofit, Text_Image_Zho_autofit
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
+
 
 NODE_CLASS_MAPPINGS = {
+    "SplitString": SplitString,
     "AutoGamma": AutoGamma,
     "ChromaKey": ChromaKeyNode,
     "MaskSorter": MaskSorter,
@@ -30,11 +36,14 @@ NODE_CLASS_MAPPINGS = {
     "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
     "SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor,
     "AliyunCommonSegmentation": AliyunCommonSegmentation,
-    "SplitString": SplitString,
+    "Text_Image_Zho_autofit": Text_Image_Zho_autofit,
+    "Text_Image_Multiline_Zho_autofit": Text_Image_Multiline_Zho_autofit,
+    "BIMO_CornerPinPerspective": BIMO_CornerPinPerspective,
 }
 
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "SplitString": "Split String",
     "AutoGamma": "Auto Gamma",
     "ColorRatioCalculator": "Color Ratio Calculator",
     "ChromaKey": "Chroma Key",
@@ -50,5 +59,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
     "SeedreamImageGenerateExecutor": "Seedream Image Generate Executor",
     "AliyunCommonSegmentation": "Aliyun Common Segmentation (crop/mask/whiteBK)",
-    "SplitString": "Split String",
+    "Text_Image_Zho_autofit": "Text Image Zho AutoFit",
+    "Text_Image_Multiline_Zho_autofit": "Text Image Multiline Zho AutoFit",
+    "BIMO_CornerPinPerspective": "Corner Pin / Perspective Warp",
 }
