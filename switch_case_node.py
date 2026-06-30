@@ -11,7 +11,7 @@ class AnyType(str):
 any = AnyType("*")
 
 
-class SwitchCaseNode:
+class SwitchCaseNodePro:
     @classmethod
     def INPUT_TYPES(s):
         return {

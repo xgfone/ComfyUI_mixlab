@@ -14,7 +14,7 @@ from .raster_card_maker import RasterCardMaker
 from .seedream_concurrent import SeedreamImageGenerateConcurrent
 from .seedream_node_executor import SeedreamImageGenerateExecutor
 from .split_string import SplitString
-from .switch_case_node import SwitchCaseNode
+from .switch_case_node import SwitchCaseNodePro
 from .zho_text_image import Text_Image_Multiline_Zho_autofit, Text_Image_Zho_autofit
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
@@ -26,7 +26,7 @@ NODE_CLASS_MAPPINGS = {
     "ChromaKey": ChromaKeyNode,
     "MaskSorter": MaskSorter,
     "FaceToMaskCopy": FaceToMaskCopy,
-    "SwitchCaseNode": SwitchCaseNode,
+    "SwitchCaseNodePro": SwitchCaseNodePro,
     "RasterCardMaker": RasterCardMaker,
     "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
@@ -51,7 +51,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ChromaKey": "Chroma Key",
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
     "FaceToMaskCopy": "Face To Mask(Copy)",
-    "SwitchCaseNode": "Switch Case Node",
+    "SwitchCaseNodePro": "Switch Case Node Pro",
     "RasterCardMaker": "Raster Card Maker",
     "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
