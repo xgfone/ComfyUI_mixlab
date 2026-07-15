@@ -7,6 +7,7 @@ from .corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
 from .doubao import DoubaoSingleTurnChatNodeSDKv2
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
+from .gpt_image_2 import GPTImage2Generator
 from .load_image_from_url import LoadImageAndMaskFromUrl
 from .mask_sort import MaskSorter
 from .prompt_logo_cleaner import PromptLogoCleaner
@@ -30,6 +31,7 @@ NODE_CLASS_MAPPINGS = {
     "RasterCardMaker": RasterCardMaker,
     "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
+    "GPTImage2Generator": GPTImage2Generator,
     "ColorRatioCalculator": ColorRatioCalculator,
     "LoadImageAndMaskFromUrl": LoadImageAndMaskFromUrl,
     "GarmentCategoryMapper": GarmentCategoryMapper,
@@ -47,6 +49,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SplitString": "Split String",
     "AutoGamma": "Auto Gamma",
+    "GPTImage2Generator": "OpenAI GPT Image 2",
     "ColorRatioCalculator": "Color Ratio Calculator",
     "ChromaKey": "Chroma Key",
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
