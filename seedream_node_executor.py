@@ -25,7 +25,7 @@ class SeedreamImageGenerateExecutor:
                     {"multiline": True, "default": "", "placeholder": "Enter your image generation prompt here..."},
                 ),
                 "image1": ("IMAGE",),
-                "model": (["doubao-seedream-4-0-250828"], {"default": "doubao-seedream-4-0-250828"}),
+                "model": (["doubao-seedream-4-0-250828","doubao-seedream-4-5-251128","doubao-seedream-5-0-lite-260128","doubao-seedream-5-0-pro-260628"], {"default": "doubao-seedream-4-0-250828"}),
                 "aspect_ratio": (
                     ["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16", "21:9", "2K", "3K", "3.5K", "4K"],
                     {"default": "1:1"},
@@ -284,7 +284,7 @@ class SeedreamImageGenerateExecutor:
             "3.5K": "2933x4400",
             "4K": "4K",
         }
-        return ratio_map.get(aspect_ratio, "2048x2048")
+        return ratio_map.get(aspect_ratio, aspect_ratio)
 
     def download_image_from_url(self, url):
         """Download image from URL and convert to tensor"""
@@ -708,6 +708,10 @@ class SeedreamImageGenerateExecutor:
 
             # Prepare generation options
             generation_options = SequentialImageGenerationOptions(max_images=max_images)
+
+            if model == "doubao-seedream-5-0-pro-260628":
+                sequential_image_generation = None
+                generation_options = None
 
             # Generate images
             images_response = self.client.images.generate(
