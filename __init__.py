@@ -7,6 +7,7 @@ from .corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
 from .doubao import DoubaoSingleTurnChatNodeSDKv2
 from .face2mask import FaceToMaskCopy
 from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
+from .gemini_image_node_executor import GeminiImageGenerateExecutor
 from .gpt_image_2 import GPTImage2Generator
 from .load_image_from_url import LoadImageAndMaskFromUrl
 from .mask_sort import MaskSorter
@@ -43,6 +44,7 @@ NODE_CLASS_MAPPINGS = {
     "Text_Image_Zho_autofit": Text_Image_Zho_autofit,
     "Text_Image_Multiline_Zho_autofit": Text_Image_Multiline_Zho_autofit,
     "BIMO_CornerPinPerspective": BIMO_CornerPinPerspective,
+    "GeminiImageGenerate": GeminiImageGenerateExecutor,
 }
 
 
@@ -68,4 +70,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Text_Image_Zho_autofit": "Text Image Zho AutoFit",
     "Text_Image_Multiline_Zho_autofit": "Text Image Multiline Zho AutoFit",
     "BIMO_CornerPinPerspective": "Corner Pin / Perspective Warp",
+    "GeminiImageGenerate": "Gemini Image Generator",
 }
