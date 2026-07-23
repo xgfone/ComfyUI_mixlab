@@ -40,13 +40,17 @@ class GeminiImageGenerateExecutor:
                         "16:9",
                         "9:16",
                         "21:9",
-                        "2K",
-                        "3K",
-                        "3.5K",
-                        "4K",
+                        "1:4",
+                        "4:1",
+                        "1:8",
+                        "8:1",
+                        "4:5",
+                        "5:4",
                     ],
                     {"default": "1:1"},
                 ),
+                "image_size":(["1K","2K","4K"],{"default": "1K"}),
+
                 "sequential_image_generation": (
                     ["auto", "enabled", "disabled"],
                     {"default": "auto"},
@@ -343,6 +347,7 @@ class GeminiImageGenerateExecutor:
         image1,
         model,
         aspect_ratio,
+        image_size,
         sequential_image_generation,
         max_images,
         response_format,
@@ -523,6 +528,7 @@ class GeminiImageGenerateExecutor:
                     t_image1,
                     model,
                     aspect_ratio,
+                    image_size,
                     sequential_image_generation,
                     max_images,
                     response_format,
@@ -682,6 +688,7 @@ class GeminiImageGenerateExecutor:
         image1,
         model,
         aspect_ratio,
+        image_size,
         sequential_image_generation,
         max_images,
         response_format,
@@ -785,7 +792,10 @@ class GeminiImageGenerateExecutor:
             parts = [{"text": prompt}] + image_parts
             payload = {
                 "contents": [{"role": "user", "parts": parts}],
-                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+                "generationConfig": {
+                    "responseModalities": ["TEXT", "IMAGE"],
+                    "ImageConfig":{"aspectRatio": aspect_ratio, "imageSize": image_size},
+                },
             }
             request_url = self.build_generate_content_url(base_url, model)
             response = requests.post(
