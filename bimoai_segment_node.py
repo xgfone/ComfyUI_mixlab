@@ -187,16 +187,20 @@ class BimoAISegmentImage:
     @classmethod
     def VALIDATE_INPUTS(
         cls,
-        base_url: str,
-        model_id: str,
-        image_url: str,
-        max_persons: int,
-        poll_interval_seconds: float,
-        timeout_seconds: float,
-        http_timeout_seconds: float,
+        base_url: Optional[str] = None,
+        model_id: Optional[str] = None,
+        image_url: Optional[str] = None,
+        max_persons: Optional[int] = None,
+        poll_interval_seconds: Optional[float] = None,
+        timeout_seconds: Optional[float] = None,
+        http_timeout_seconds: Optional[float] = None,
     ):
         try:
-            _validate_inputs(
+            # ComfyUI uses None here for inputs connected to another node,
+            # because their runtime values do not exist during prompt
+            # validation. Validate only the constants that are available now;
+            # segment_image() validates the complete resolved input set again.
+            _validate_available_inputs(
                 base_url=base_url,
                 model_id=model_id,
                 image_url=image_url,
@@ -516,34 +520,10 @@ def _validate_inputs(
     timeout_seconds: float,
     http_timeout_seconds: float,
 ) -> ValidatedInputs:
-    base_url = base_url.strip().rstrip("/")
-    parsed_base_url = urlparse(base_url)
-    if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
-        raise ValueError("base_url 必须是有效的 HTTP(S) 地址。")
-
-    model_id = model_id.strip()
-    if not model_id:
-        raise ValueError("model_id 不能为空。")
-
-    image_url = image_url.strip()
-    parsed_image_url = urlparse(image_url)
-    if parsed_image_url.scheme not in {"http", "https"} or not parsed_image_url.netloc:
-        raise ValueError("image_url 必须是有效的 HTTP(S) URL。")
-
-    if len(image_url) > 128:
-        raise ValueError("image_url 不能超过接口规定的 128 个字符。")
-
-    if isinstance(max_persons, bool):
-        raise TypeError("max_persons 必须是整数，不能是布尔值。")
-
-    try:
-        max_persons = int(max_persons)
-    except (TypeError, ValueError) as exc:
-        raise TypeError("max_persons 必须是整数。") from exc
-
-    if not 0 <= max_persons <= 6:
-        raise ValueError("max_persons 必须在 0 到 6 之间。")
-
+    base_url = _validate_base_url(base_url)
+    model_id = _validate_model_id(model_id)
+    image_url = _validate_image_url(image_url)
+    max_persons = _validate_max_persons(max_persons)
     timeout_seconds = _positive_float(timeout_seconds, "timeout_seconds")
     http_timeout_seconds = _positive_float(http_timeout_seconds, "http_timeout_seconds")
     poll_interval_seconds = _positive_float(poll_interval_seconds, "poll_interval_seconds")
@@ -557,6 +537,82 @@ def _validate_inputs(
         timeout_seconds=timeout_seconds,
         http_timeout_seconds=http_timeout_seconds,
     )
+
+
+def _validate_available_inputs(
+    *,
+    base_url: Optional[str],
+    model_id: Optional[str],
+    image_url: Optional[str],
+    max_persons: Optional[int],
+    poll_interval_seconds: Optional[float],
+    timeout_seconds: Optional[float],
+    http_timeout_seconds: Optional[float],
+) -> None:
+    """Validate prompt-time constants while ignoring unresolved node links."""
+    if base_url is not None:
+        _validate_base_url(base_url)
+    if model_id is not None:
+        _validate_model_id(model_id)
+    if image_url is not None:
+        _validate_image_url(image_url)
+    if max_persons is not None:
+        _validate_max_persons(max_persons)
+    if poll_interval_seconds is not None:
+        _positive_float(poll_interval_seconds, "poll_interval_seconds")
+    if timeout_seconds is not None:
+        _positive_float(timeout_seconds, "timeout_seconds")
+    if http_timeout_seconds is not None:
+        _positive_float(http_timeout_seconds, "http_timeout_seconds")
+
+
+def _validate_base_url(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("base_url 必须是字符串。")
+
+    base_url = value.strip().rstrip("/")
+    parsed_base_url = urlparse(base_url)
+    if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
+        raise ValueError("base_url 必须是有效的 HTTP(S) 地址。")
+    return base_url
+
+
+def _validate_model_id(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("model_id 必须是字符串。")
+
+    model_id = value.strip()
+    if not model_id:
+        raise ValueError("model_id 不能为空。")
+    return model_id
+
+
+def _validate_image_url(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("image_url 必须是字符串。")
+
+    image_url = value.strip()
+    parsed_image_url = urlparse(image_url)
+    if parsed_image_url.scheme not in {"http", "https"} or not parsed_image_url.netloc:
+        raise ValueError("image_url 必须是有效的 HTTP(S) URL。")
+
+    if len(image_url) > 128:
+        raise ValueError("image_url 不能超过接口规定的 128 个字符。")
+    return image_url
+
+
+def _validate_max_persons(value: Any) -> int:
+    if isinstance(value, bool):
+        raise TypeError("max_persons 必须是整数，不能是布尔值。")
+
+    try:
+        max_persons = int(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("max_persons 必须是整数。") from exc
+
+    if not 0 <= max_persons <= 6:
+        raise ValueError("max_persons 必须在 0 到 6 之间。")
+    return max_persons
 
 
 def _positive_float(value: Any, name: str) -> float:
