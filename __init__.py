@@ -19,6 +19,7 @@ from .seedream_concurrent import SeedreamImageGenerateConcurrent
 from .seedream_node_executor import SeedreamImageGenerateExecutor
 from .split_string import SplitString
 from .switch_case_node import SwitchCaseNodePro
+from .was_text_shuffle import WASTextShuffle
 from .zho_text_image import Text_Image_Multiline_Zho_autofit, Text_Image_Zho_autofit
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
@@ -49,6 +50,7 @@ NODE_CLASS_MAPPINGS = {
     "GeminiImageGenerate": GeminiImageGenerateExecutor,
     "BimoAITextSplitIndex": BimoAITextSplitIndex,
     "BimoAISegmentImage": BimoAISegmentImage,
+    "WASTextShuffle":WASTextShuffle,
 }
 
 
@@ -77,4 +79,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "GeminiImageGenerate": "Gemini Image Generator",
     "BimoAITextSplitIndex": "BimoAI文本分隔元素读取",
     "BimoAISegmentImage": "BimoAI Image Segment",
+    "WASTextShuffle":"WAS Text Shuffle"
 }
