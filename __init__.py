@@ -2,6 +2,7 @@ from .aliyun_face_beauty import AliyunFaceBeautyNode
 from .aliyun_image_seg import AliyunCommonSegmentation
 from .auto_gamma import AutoGamma
 from .bimoai_segment_node import BimoAISegmentImage
+from .bimoai_text_split import BimoAITextSplitIndex
 from .chroma_key import ChromaKeyNode
 from .color_ratio_node import ColorRatioCalculator
 from .corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
@@ -46,6 +47,7 @@ NODE_CLASS_MAPPINGS = {
     "Text_Image_Multiline_Zho_autofit": Text_Image_Multiline_Zho_autofit,
     "BIMO_CornerPinPerspective": BIMO_CornerPinPerspective,
     "GeminiImageGenerate": GeminiImageGenerateExecutor,
+    "BimoAITextSplitIndex": BimoAITextSplitIndex,
     "BimoAISegmentImage": BimoAISegmentImage,
 }
 
@@ -73,5 +75,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Text_Image_Multiline_Zho_autofit": "Text Image Multiline Zho AutoFit",
     "BIMO_CornerPinPerspective": "Corner Pin / Perspective Warp",
     "GeminiImageGenerate": "Gemini Image Generator",
+    "BimoAITextSplitIndex": "BimoAI文本分隔元素读取",
     "BimoAISegmentImage": "BimoAI Image Segment",
 }
