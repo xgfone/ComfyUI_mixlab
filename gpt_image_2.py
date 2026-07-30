@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -11,7 +12,8 @@ from PIL import Image
 
 class GPTImage2Generator:
     """
-    A ComfyUI node for editing/composing images using OPENAI gpt-image-2 API.
+    A ComfyUI node for editing/composing images using OPENAI gpt-image-2 API,
+    with per-image status output and prompt-based test markers.
     """
 
     @classmethod
@@ -148,9 +150,9 @@ class GPTImage2Generator:
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("images", "text")
-    OUTPUT_IS_LIST = (True, False)
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("images", "text", "status")
+    OUTPUT_IS_LIST = (True, False, False)
     FUNCTION = "generate_images"
     CATEGORY = "image/generation"
 
@@ -192,6 +194,60 @@ class GPTImage2Generator:
             "gateway timeout",
         ]
         return any(keyword in error_text for keyword in timeout_keywords)
+
+    def get_failure_status(self, result):
+        """Map every failed task to one of the four allowed failure statuses."""
+        if result.get("is_timeout"):
+            return "failure_timeout"
+
+        error_text = result.get("text", "").lower()
+        safety_keywords = [
+            "moderation_blocked",
+            "safety system",
+            "content_policy",
+            "content policy",
+            "content_filter",
+            "content filter",
+            "policy violation",
+        ]
+        if any(keyword in error_text for keyword in safety_keywords):
+            return "failure_safety"
+
+        network_keywords = [
+            "connection error",
+            "connection refused",
+            "connection reset",
+            "connection aborted",
+            "remote disconnected",
+            "name resolution",
+            "network is unreachable",
+            "max retries exceeded",
+            "proxy error",
+            "ssl error",
+            "bad gateway",
+            "service unavailable",
+            "502",
+            "503",
+        ]
+        if any(keyword in error_text for keyword in network_keywords):
+            return "failure_network"
+
+        return "failure_other"
+
+    def get_test_directive(self, prompt):
+        """Parse optional test markers without calling the image API."""
+        failure_match = re.search(
+            r"\[TEST_FAILURE\s*[:：]\s*([^\]]*)\]",
+            prompt or "",
+        )
+        if failure_match:
+            reason = failure_match.group(1).strip().strip("\"'“”‘’").strip()
+            return "failure", reason or "测试失败"
+
+        if "[TEST_SUCCESS]" in (prompt or ""):
+            return "success", ""
+
+        return None, ""
 
     def validate_input_data(self, image1, retry_count=0):
         """
@@ -443,7 +499,7 @@ class GPTImage2Generator:
         # ========== 2. 失败容忍参数标准化 ==========
         try:
             ignore_failure = int(ignore_failure)
-        except Exception:
+        except ValueError:
             ignore_failure = 0
         ignore_failure = max(0, min(ignore_failure, len(tasks)))
 
@@ -462,6 +518,19 @@ class GPTImage2Generator:
             t_image6 = t_images[5] if len(t_images) > 5 else None
 
             try:
+                test_type, test_reason = self.get_test_directive(t_prompt)
+                if test_type == "failure":
+                    raise RuntimeError(f"测试任务失败: {test_reason}")
+                if test_type == "success":
+                    print(f"🧪 测试任务 {t_idx} 模拟成功")
+                    return {
+                        "index": t_idx,
+                        "ok": True,
+                        "images": [self.make_placeholder_tensor("white")],
+                        "text": "测试任务成功，已返回白色占位图。",
+                        "attempt": attempt_no,
+                    }
+
                 # 输入校验只做一次；失败交给并发层统计，不在这里返回占位图。
                 is_valid, _ = self.validate_input_data(t_image1, retry_count=0)
                 if not is_valid:
@@ -497,11 +566,9 @@ class GPTImage2Generator:
                     "attempt": attempt_no,
                 }
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 is_timeout = self.is_timeout_error(e)
-                print(
-                    f"任务 {t_idx} 执行失败 (attempt={attempt_no}, timeout={is_timeout}): {str(e)}"
-                )
+                print(f"任务 {t_idx} 执行失败 (attempt={attempt_no}, timeout={is_timeout}): {e}")
                 return {
                     "index": t_idx,
                     "ok": False,
@@ -578,9 +645,11 @@ class GPTImage2Generator:
             return (
                 [],
                 f"⚠️ 所有任务均失败，但失败数未超过 ignore_failure={ignore_failure}，因此不返回占位图。",
+                "",
             )
 
         all_output_tensors = []
+        all_statuses = []
         all_result_texts = [
             "📊 gpt-image-2 批量任务汇总:",
             f"总任务数: {len(tasks)}",
@@ -617,13 +686,16 @@ class GPTImage2Generator:
             t_idx = r["index"]
             if r.get("ok"):
                 all_output_tensors.extend(r["images"])
+                all_statuses.extend(["success"] * len(r["images"]))
                 all_result_texts.append(f"===== 任务 {t_idx} =====\n{r['text']}")
             elif should_add_placeholders:
                 all_output_tensors.append(self.make_placeholder_tensor("red"))
+                all_statuses.append(self.get_failure_status(r))
                 all_result_texts.append(f"===== 任务 {t_idx} 失败占位图 =====\n{r.get('text')}")
 
         text_output = "\n\n".join(all_result_texts)
-        return (all_output_tensors, text_output)
+        status_output = "|".join(all_statuses)
+        return (all_output_tensors, text_output, status_output)
 
     def _execute_generation(
         self,
@@ -718,11 +790,13 @@ class GPTImage2Generator:
                     api_error.get("message") or response.text or f"HTTP {response.status_code}"
                 )
                 code = api_error.get("code")
+                error_type = api_error.get("type")
                 request_id = api_error.get("param")
                 details = ", ".join(
                     item
                     for item in [
                         f"code={code}" if code else "",
+                        f"type={error_type}" if error_type else "",
                         f"request_id={request_id}" if request_id else "",
                     ]
                     if item
