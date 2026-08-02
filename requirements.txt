@@ -3,15 +3,7 @@ numpy
 pillow
 opencv-python
 requests
+aiohttp
 
 # doubao
 volcengine-python-sdk[ark]
-
-# seedream
-aiohttp
-
-# aliyun
-alibabacloud_facebody20191230
-alibabacloud_imageseg20191230
-alibabacloud_tea_openapi
-alibabacloud_tea_util

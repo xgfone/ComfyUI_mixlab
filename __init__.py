@@ -1,5 +1,3 @@
-from .aliyun_face_beauty import AliyunFaceBeautyNode
-from .aliyun_image_seg import AliyunCommonSegmentation
 from .auto_gamma import AutoGamma
 from .bimoai_segment_node import BimoAISegmentImage
 from .bimoai_text_split import BimoAITextSplitIndex
@@ -33,7 +31,6 @@ NODE_CLASS_MAPPINGS = {
     "FaceToMaskCopy": FaceToMaskCopy,
     "SwitchCaseNodePro": SwitchCaseNodePro,
     "RasterCardMaker": RasterCardMaker,
-    "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
     "GPTImage2Generator": GPTImage2Generator,
     "ColorRatioCalculator": ColorRatioCalculator,
@@ -43,7 +40,6 @@ NODE_CLASS_MAPPINGS = {
     "DoubaoSingleTurnChatNodeSDKv2": DoubaoSingleTurnChatNodeSDKv2,
     "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
     "SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor,
-    "AliyunCommonSegmentation": AliyunCommonSegmentation,
     "Text_Image_Zho_autofit": Text_Image_Zho_autofit,
     "Text_Image_Multiline_Zho_autofit": Text_Image_Multiline_Zho_autofit,
     "BIMO_CornerPinPerspective": BIMO_CornerPinPerspective,
@@ -64,7 +60,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "FaceToMaskCopy": "Face To Mask(Copy)",
     "SwitchCaseNodePro": "Switch Case Node Pro",
     "RasterCardMaker": "Raster Card Maker",
-    "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
     "LoadImageAndMaskFromUrl": "Load Image And Mask From Url",
     "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
@@ -72,7 +67,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DoubaoSingleTurnChatNodeSDKv2": "Doubao Chat (Single Turn, Ark SDK)",
     "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
     "SeedreamImageGenerateExecutor": "Seedream Image Generate Executor",
-    "AliyunCommonSegmentation": "Aliyun Common Segmentation (crop/mask/whiteBK)",
     "Text_Image_Zho_autofit": "Text Image Zho AutoFit",
     "Text_Image_Multiline_Zho_autofit": "Text Image Multiline Zho AutoFit",
     "BIMO_CornerPinPerspective": "Corner Pin / Perspective Warp",
