@@ -193,7 +193,3 @@ cython_debug/
 # test
 test/
 dist/
-
-# hidden files
-.*
-_*
