@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import math
-from typing import Tuple, Union
 
 import numpy as np
 import torch
@@ -9,7 +10,7 @@ def _to_numpy(t: torch.Tensor) -> np.ndarray:
     return t.detach().cpu().numpy()
 
 
-def _flatten_to_BHW(mask: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+def _flatten_to_BHW(mask: torch.Tensor | np.ndarray) -> np.ndarray:
     """
     通用维度归一：
     - 接受任意 >=2 维的 mask，只要最后两维是 (H,W)
@@ -33,7 +34,7 @@ def _mask_area(arr2d: np.ndarray, thresh: float = 0.5) -> int:
     return int((arr2d > thresh).sum())
 
 
-def _mask_centroid(arr2d: np.ndarray, thresh: float = 0.5) -> Tuple[float, float]:
+def _mask_centroid(arr2d: np.ndarray, thresh: float = 0.5) -> tuple[float, float]:
     ys, xs = np.nonzero(arr2d > thresh)  # 2D 情况只返回 (y, x)
     if xs.size == 0:
         return (np.nan, np.nan)
@@ -114,5 +115,5 @@ class MaskSorter:
             raise ValueError(f"Unsupported sort_by: {sort_by}")
 
         sorted_np = [r["mask"].astype(np.float32) for r in records]
-        sorted_tensor = torch.from_numpy(np.stack(sorted_np, axis=0)).to(device=device, dtype=torch.float32)
+        sorted_tensor = torch.from_numpy(np.stack(sorted_np, axis=0)).to(device=device, dtype=dtype)
         return (sorted_tensor,)
