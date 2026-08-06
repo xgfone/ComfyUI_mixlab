@@ -88,13 +88,17 @@ function computeCoordRange(points) {
 
   const padX = Math.max(0.25, (maxX - minX) * 0.18);
   const padY = Math.max(0.25, (maxY - minY) * 0.18);
-  minX -= padX; maxX += padX;
-  minY -= padY; maxY += padY;
+  minX -= padX;
+  maxX += padX;
+  minY -= padY;
+  maxY += padY;
 
   // Keep the editor usable and avoid runaway dragging. Backend still accepts
   // the numeric widgets up to their widget min/max.
-  minX = Math.max(-4, minX); maxX = Math.min(5, maxX);
-  minY = Math.max(-4, minY); maxY = Math.min(5, maxY);
+  minX = Math.max(-4, minX);
+  maxX = Math.min(5, maxX);
+  minY = Math.max(-4, minY);
+  maxY = Math.min(5, maxY);
   if (maxX - minX < 0.01) maxX = minX + 0.01;
   if (maxY - minY < 0.01) maxY = minY + 0.01;
   return { minX, maxX, minY, maxY };
@@ -151,8 +155,16 @@ function drawImageTriangle(ctx, img, sx0, sy0, sx1, sy1, sx2, sy2, dx0, dy0, dx1
   const b = (dy0 * (sy1 - sy2) + dy1 * (sy2 - sy0) + dy2 * (sy0 - sy1)) / denom;
   const c = (dx0 * (sx2 - sx1) + dx1 * (sx0 - sx2) + dx2 * (sx1 - sx0)) / denom;
   const d = (dy0 * (sx2 - sx1) + dy1 * (sx0 - sx2) + dy2 * (sx1 - sx0)) / denom;
-  const e = (dx0 * (sx1 * sy2 - sx2 * sy1) + dx1 * (sx2 * sy0 - sx0 * sy2) + dx2 * (sx0 * sy1 - sx1 * sy0)) / denom;
-  const f = (dy0 * (sx1 * sy2 - sx2 * sy1) + dy1 * (sx2 * sy0 - sx0 * sy2) + dy2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+  const e =
+    (dx0 * (sx1 * sy2 - sx2 * sy1) +
+      dx1 * (sx2 * sy0 - sx0 * sy2) +
+      dx2 * (sx0 * sy1 - sx1 * sy0)) /
+    denom;
+  const f =
+    (dy0 * (sx1 * sy2 - sx2 * sy1) +
+      dy1 * (sx2 * sy0 - sx0 * sy2) +
+      dy2 * (sx0 * sy1 - sx1 * sy0)) /
+    denom;
 
   ctx.transform(a, b, c, d, e, f);
   ctx.drawImage(img, 0, 0);
@@ -168,8 +180,38 @@ function drawWarpedPreview(ctx, node, rect, ptsPx) {
     const ih = img.naturalHeight || img.height;
     const p = ptsPx;
     try {
-      drawImageTriangle(ctx, img, 0, 0, iw, 0, iw, ih, p[0].x, p[0].y, p[1].x, p[1].y, p[2].x, p[2].y);
-      drawImageTriangle(ctx, img, 0, 0, iw, ih, 0, ih, p[0].x, p[0].y, p[2].x, p[2].y, p[3].x, p[3].y);
+      drawImageTriangle(
+        ctx,
+        img,
+        0,
+        0,
+        iw,
+        0,
+        iw,
+        ih,
+        p[0].x,
+        p[0].y,
+        p[1].x,
+        p[1].y,
+        p[2].x,
+        p[2].y,
+      );
+      drawImageTriangle(
+        ctx,
+        img,
+        0,
+        0,
+        iw,
+        ih,
+        0,
+        ih,
+        p[0].x,
+        p[0].y,
+        p[2].x,
+        p[2].y,
+        p[3].x,
+        p[3].y,
+      );
     } catch (e) {
       // Fall back to outline preview.
     }
@@ -267,7 +309,7 @@ function createCornerEditorWidget(node) {
         y + headerH + pad,
         Math.max(60, width - pad * 2),
         Math.max(60, height - headerH - footerH - pad * 2),
-        aspect
+        aspect,
       );
 
       const pts = getPoints(node);
@@ -280,7 +322,11 @@ function createCornerEditorWidget(node) {
       ctx.font = "12px sans-serif";
       ctx.textBaseline = "middle";
       ctx.fillStyle = enabled ? "#ffffff" : "#b8b8b8";
-      ctx.fillText(enabled ? "Corner Editor: ON - drag handles" : "Corner Editor: LOCKED", pad, y + 12);
+      ctx.fillText(
+        enabled ? "Corner Editor: ON - drag handles" : "Corner Editor: LOCKED",
+        pad,
+        y + 12,
+      );
       ctx.fillStyle = expand ? "rgba(100,210,255,0.9)" : "rgba(255,255,255,0.55)";
       ctx.textAlign = "right";
       ctx.fillText(expand ? "Expand Canvas" : "Crop to Source Size", width - pad, y + 12);
@@ -348,7 +394,10 @@ function createCornerEditorWidget(node) {
       const px = pos?.[0] ?? 0;
       const py = pos?.[1] ?? 0;
       const rect = state.rect;
-      const ptsPx = getPoints(node).map((p) => ({ ...p, ...coordToPixel(p, rect, state.coordRange) }));
+      const ptsPx = getPoints(node).map((p) => ({
+        ...p,
+        ...coordToPixel(p, rect, state.coordRange),
+      }));
 
       if (isDown) {
         let best = null;
