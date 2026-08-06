@@ -1,6 +1,5 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
 
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
@@ -8,5 +7,9 @@
       "source.fixAll.ruff": "explicit",
       "source.organizeImports.ruff": "explicit"
     }
+  },
+
+  "[json][jsonc][markdown][javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   }
 }
