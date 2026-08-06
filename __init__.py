@@ -1,3 +1,4 @@
+from .aliyun_face_beauty import AliyunFaceBeautyNode
 from .auto_gamma import AutoGamma
 from .bimoai_segment_node import BimoAISegmentImage
 from .bimoai_text_split import BimoAITextSplitIndex
@@ -31,6 +32,7 @@ NODE_CLASS_MAPPINGS = {
     "FaceToMaskCopy": FaceToMaskCopy,
     "SwitchCaseNodePro": SwitchCaseNodePro,
     "RasterCardMaker": RasterCardMaker,
+    "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
     "GPTImage2Generator": GPTImage2Generator,
     "ColorRatioCalculator": ColorRatioCalculator,
@@ -46,7 +48,7 @@ NODE_CLASS_MAPPINGS = {
     "GeminiImageGenerate": GeminiImageGenerateExecutor,
     "BimoAITextSplitIndex": BimoAITextSplitIndex,
     "BimoAISegmentImage": BimoAISegmentImage,
-    "WASTextShuffle":WASTextShuffle,
+    "WASTextShuffle": WASTextShuffle,
 }
 
 
@@ -60,6 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "FaceToMaskCopy": "Face To Mask(Copy)",
     "SwitchCaseNodePro": "Switch Case Node Pro",
     "RasterCardMaker": "Raster Card Maker",
+    "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
     "LoadImageAndMaskFromUrl": "Load Image And Mask From Url",
     "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
@@ -73,5 +76,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "GeminiImageGenerate": "Gemini Image Generator",
     "BimoAITextSplitIndex": "BimoAI文本分隔元素读取",
     "BimoAISegmentImage": "BimoAI Image Segment",
-    "WASTextShuffle":"WAS Text Shuffle"
+    "WASTextShuffle": "WAS Text Shuffle",
 }
