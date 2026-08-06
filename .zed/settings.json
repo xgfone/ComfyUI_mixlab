@@ -1,7 +1,13 @@
 {
   "format_on_save": "on",
-  "code_actions_on_format": {
-    "source.fixAll": true,
-    "source.organizeImports": true
+
+  "languages": {
+    "Python": {
+      "formatter": { "language_server": { "name": "ruff" } },
+      "code_actions_on_format": {
+        "source.fixAll.ruff": true,
+        "source.organizeImports.ruff": true
+      }
+    }
   }
 }
