@@ -67,7 +67,11 @@ def _load_rules(dir_path: Path):
     key = str(dir_path.resolve())
     mtime = 0
     try:
-        mtime = max((dir_path / fn).stat().st_mtime for fn in [F_TOP, F_BOTTOM, F_SET] if (dir_path / fn).exists())
+        mtime = max(
+            (dir_path / fn).stat().st_mtime
+            for fn in [F_TOP, F_BOTTOM, F_SET]
+            if (dir_path / fn).exists()
+        )
     except Exception:
         mtime = 0
     cache = _RULE_CACHE.get(key)

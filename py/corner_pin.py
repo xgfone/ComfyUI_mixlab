@@ -16,7 +16,9 @@ WEB_DIRECTORY = "./js"
 
 
 def _pil_constants():
-    transform_perspective = Image.Transform.PERSPECTIVE if hasattr(Image, "Transform") else Image.PERSPECTIVE
+    transform_perspective = (
+        Image.Transform.PERSPECTIVE if hasattr(Image, "Transform") else Image.PERSPECTIVE
+    )
     resampling = getattr(Image, "Resampling", Image)
     return transform_perspective, resampling
 
@@ -245,7 +247,9 @@ class BIMO_CornerPinPerspective:
             (float(bl_x) * (width - 1), float(bl_y) * (height - 1)),
         ]
 
-        out_w, out_h, shift_x, shift_y, dst_quad = _compute_canvas(width, height, dst_quad_raw, bool(expand_canvas))
+        out_w, out_h, shift_x, shift_y, dst_quad = _compute_canvas(
+            width, height, dst_quad_raw, bool(expand_canvas)
+        )
 
         src_rect = [
             (0.0, 0.0),

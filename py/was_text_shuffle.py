@@ -1,5 +1,6 @@
 import random
 
+
 class WASTextShuffle:
     def __init__(self):
         pass
@@ -9,8 +10,8 @@ class WASTextShuffle:
         return {
             "required": {
                 "text": ("STRING", {"multiline": False, "default": "text"}),
-                "separator": ("STRING", {"default": ',', "multiline": False}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+                "separator": ("STRING", {"default": ",", "multiline": False}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF}),
             }
         }
 
@@ -26,7 +27,4 @@ class WASTextShuffle:
         random.shuffle(text_list)
         new_text = separator.join(text_list)
 
-        return (new_text, )
-    
-
-
+        return (new_text,)

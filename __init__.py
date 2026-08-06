@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from .py.aliyun_face_beauty import AliyunFaceBeautyNode
 from .py.auto_gamma import AutoGamma
 from .py.bimoai_segment_node import BimoAISegmentImage

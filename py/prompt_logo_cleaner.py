@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-
 import os.path
 import re
 
@@ -13,7 +12,10 @@ class PromptLogoCleaner:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True}),
-                "brand_file_path": ("STRING", {"default": os.path.join(_DIR, "assets/brand_words.txt")}),
+                "brand_file_path": (
+                    "STRING",
+                    {"default": os.path.join(_DIR, "assets/brand_words.txt")},
+                ),
             }
         }
 

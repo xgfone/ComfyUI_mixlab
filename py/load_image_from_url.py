@@ -35,7 +35,10 @@ class LoadImageAndMaskFromUrl:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "url": ("STRING", {"multiline": True, "default": "https://", "dynamicPrompts": False}),
+                "url": (
+                    "STRING",
+                    {"multiline": True, "default": "https://", "dynamicPrompts": False},
+                ),
             },
         }
 

@@ -203,12 +203,16 @@ class ChromaKeyNode:
             processed_data = self.process_core(img_rgba, params, current_key_color)
 
             # 1. 透明图像
-            res_tensor = torch.from_numpy(processed_data["final_transparent"].astype(np.float32) / 255.0)
+            res_tensor = torch.from_numpy(
+                processed_data["final_transparent"].astype(np.float32) / 255.0
+            )
             results_transparent.append(res_tensor[..., :3])  # RGB
             masks.append(res_tensor[..., 3])  # Alpha
 
             # 2. 不透明处理后图像
-            opaque_tensor = torch.from_numpy(processed_data["final_opaque"].astype(np.float32) / 255.0)
+            opaque_tensor = torch.from_numpy(
+                processed_data["final_opaque"].astype(np.float32) / 255.0
+            )
             results_opaque.append(opaque_tensor[..., :3])  # 只要 RGB (Alpha 肯定是 1)
 
         return (
@@ -271,7 +275,11 @@ class ChromaKeyNode:
                 ((color[..., 2] - Y) * 0.565) + 0.5,
                 ((color[..., 0] - Y) * 0.713) + 0.5,
             )
-            Y2 = (0.299 * Key_color2_rgb[..., 0]) + (0.587 * Key_color2_rgb[..., 1]) + (0.114 * Key_color2_rgb[..., 2])
+            Y2 = (
+                (0.299 * Key_color2_rgb[..., 0])
+                + (0.587 * Key_color2_rgb[..., 1])
+                + (0.114 * Key_color2_rgb[..., 2])
+            )
             U2, V2 = (
                 ((Key_color2_rgb[..., 2] - Y2) * 0.565) + 0.5,
                 ((Key_color2_rgb[..., 0] - Y2) * 0.713) + 0.5,
@@ -279,12 +287,16 @@ class ChromaKeyNode:
             U2, V2 = np.where(U2 == 0, 1e-4, U2), np.where(V2 == 0, 1e-4, V2)
             alpha = 1.0 - 2.0 * np.maximum(np.abs((U / U2) - 1.0), np.abs((V / V2) - 1.0))
         else:
-            alpha = color[..., 1] - np.maximum(color[..., 0] + Prekey_despill2, color[..., 2] + Prekey_despill2)
+            alpha = color[..., 1] - np.maximum(
+                color[..., 0] + Prekey_despill2, color[..., 2] + Prekey_despill2
+            )
 
         # 3. 亮度遮罩
         if Matte_highlights2 > 0.0:
             alpha -= Matte_highlights2 * saturate(
-                (color[..., 0] - Key_color[0]) + (color[..., 1] - Key_color[1]) + (color[..., 2] - Key_color[2])
+                (color[..., 0] - Key_color[0])
+                + (color[..., 1] - Key_color[1])
+                + (color[..., 2] - Key_color[2])
             )
         if Matte_shadows2 > 0.0:
             alpha -= Matte_shadows2 * saturate(
@@ -320,7 +332,9 @@ class ChromaKeyNode:
                 ),
                 color[..., :3],
             )
-        color[..., :3] = np.where((alpha == 1.0)[..., np.newaxis], raw_color[..., :3], color[..., :3])
+        color[..., :3] = np.where(
+            (alpha == 1.0)[..., np.newaxis], raw_color[..., :3], color[..., :3]
+        )
 
         Spill_rb = lerp(color[..., 0], color[..., 2], Spill_balance2)
         Spill_unpre = np.zeros_like(color[..., 1])

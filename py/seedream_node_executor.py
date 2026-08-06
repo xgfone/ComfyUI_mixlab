@@ -22,27 +22,67 @@ class SeedreamImageGenerateExecutor:
             "required": {
                 "prompt": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Enter your image generation prompt here..."},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Enter your image generation prompt here...",
+                    },
                 ),
                 "image1": ("IMAGE",),
-                "model": (["doubao-seedream-4-0-250828","doubao-seedream-4-5-251128","doubao-seedream-5-0-lite-260128","doubao-seedream-5-0-pro-260628"], {"default": "doubao-seedream-4-0-250828"}),
+                "model": (
+                    [
+                        "doubao-seedream-4-0-250828",
+                        "doubao-seedream-4-5-251128",
+                        "doubao-seedream-5-0-lite-260128",
+                        "doubao-seedream-5-0-pro-260628",
+                    ],
+                    {"default": "doubao-seedream-4-0-250828"},
+                ),
                 "aspect_ratio": (
-                    ["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16", "21:9", "2K", "3K", "3.5K", "4K"],
+                    [
+                        "1:1",
+                        "2:3",
+                        "3:2",
+                        "4:3",
+                        "3:4",
+                        "16:9",
+                        "9:16",
+                        "21:9",
+                        "2K",
+                        "3K",
+                        "3.5K",
+                        "4K",
+                    ],
                     {"default": "1:1"},
                 ),
-                "sequential_image_generation": (["auto", "enabled", "disabled"], {"default": "auto"}),
+                "sequential_image_generation": (
+                    ["auto", "enabled", "disabled"],
+                    {"default": "auto"},
+                ),
                 "max_images": ("INT", {"default": 1, "min": 1, "max": 10, "step": 1}),
                 "response_format": (["url", "b64_json"], {"default": "url"}),
                 "watermark": ("BOOLEAN", {"default": False}),
                 "stream": ("BOOLEAN", {"default": False}),
                 "base_url": ("STRING", {"default": "https://ark.cn-beijing.volces.com/api/v3"}),
-                "use_local_images": ("BOOLEAN", {"default": True, "tooltip": "使用本地图像（Base64格式，官方支持）"}),
+                "use_local_images": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "使用本地图像（Base64格式，官方支持）"},
+                ),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 18446744073709551615, "step": 1}),
                 "enable_auto_retry": (
                     "BOOLEAN",
                     {"default": True, "tooltip": "启用自动重试机制，处理云端工作流的异步执行问题"},
                 ),
-                "timeout": ("INT", {"default": 70, "min": 10, "max": 300, "step": 1, "tooltip": "最大等待时间(秒)。"}),
+                "timeout": (
+                    "INT",
+                    {
+                        "default": 70,
+                        "min": 10,
+                        "max": 300,
+                        "step": 1,
+                        "tooltip": "最大等待时间(秒)。",
+                    },
+                ),
             },
             "optional": {
                 # ========= 任务1额外参考图 =========
@@ -53,7 +93,11 @@ class SeedreamImageGenerateExecutor:
                 # ========= 任务2 =========
                 "prompt2": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Task 2 prompt（留空则不执行）"},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Task 2 prompt（留空则不执行）",
+                    },
                 ),
                 "task2_image1": ("IMAGE",),
                 "task2_image2": ("IMAGE",),
@@ -61,7 +105,11 @@ class SeedreamImageGenerateExecutor:
                 # ========= 任务3 =========
                 "prompt3": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Task 3 prompt（留空则不执行）"},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Task 3 prompt（留空则不执行）",
+                    },
                 ),
                 "task3_image1": ("IMAGE",),
                 "task3_image2": ("IMAGE",),
@@ -69,7 +117,11 @@ class SeedreamImageGenerateExecutor:
                 # ========= 任务4 =========
                 "prompt4": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Task 4 prompt（留空则不执行）"},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Task 4 prompt（留空则不执行）",
+                    },
                 ),
                 "task4_image1": ("IMAGE",),
                 "task4_image2": ("IMAGE",),
@@ -77,7 +129,11 @@ class SeedreamImageGenerateExecutor:
                 # ========= 任务5 =========
                 "prompt5": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Task 5 prompt（留空则不执行）"},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Task 5 prompt（留空则不执行）",
+                    },
                 ),
                 "task5_image1": ("IMAGE",),
                 "task5_image2": ("IMAGE",),
@@ -85,7 +141,11 @@ class SeedreamImageGenerateExecutor:
                 # ========= 任务6 =========
                 "prompt6": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Task 6 prompt（留空则不执行）"},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Task 6 prompt（留空则不执行）",
+                    },
                 ),
                 "task6_image1": ("IMAGE",),
                 "task6_image2": ("IMAGE",),
@@ -302,7 +362,9 @@ class SeedreamImageGenerateExecutor:
         if not api_key:
             raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
 
-        self.client = Ark(base_url=base_url, api_key=api_key.strip(), timeout=timeout, max_retries=1)
+        self.client = Ark(
+            base_url=base_url, api_key=api_key.strip(), timeout=timeout, max_retries=1
+        )
 
     def generate_images(
         self,
@@ -388,7 +450,11 @@ class SeedreamImageGenerateExecutor:
             if p is None:
                 p = ""
             p = p.strip()
-            imgs = [img for img in [img1, img2, img3, img4, img5, img6] if img is not None and img.shape[1] >= 14]
+            imgs = [
+                img
+                for img in [img1, img2, img3, img4, img5, img6]
+                if img is not None and img.shape[1] >= 14
+            ]
             if p != "" and len(imgs) > 0:
                 tasks.append(
                     {
@@ -399,19 +465,54 @@ class SeedreamImageGenerateExecutor:
                 )
 
         add_task_if_valid(
-            2, prompt2, task2_image1, task2_image_add, task2_image2, task2_image3, task2_image4, task2_image5
+            2,
+            prompt2,
+            task2_image1,
+            task2_image_add,
+            task2_image2,
+            task2_image3,
+            task2_image4,
+            task2_image5,
         )
         add_task_if_valid(
-            3, prompt3, task3_image1, task3_image_add, task3_image2, task3_image3, task3_image4, task3_image5
+            3,
+            prompt3,
+            task3_image1,
+            task3_image_add,
+            task3_image2,
+            task3_image3,
+            task3_image4,
+            task3_image5,
         )
         add_task_if_valid(
-            4, prompt4, task4_image1, task4_image_add, task4_image2, task4_image3, task4_image4, task4_image5
+            4,
+            prompt4,
+            task4_image1,
+            task4_image_add,
+            task4_image2,
+            task4_image3,
+            task4_image4,
+            task4_image5,
         )
         add_task_if_valid(
-            5, prompt5, task5_image1, task5_image_add, task5_image2, task5_image3, task5_image4, task5_image5
+            5,
+            prompt5,
+            task5_image1,
+            task5_image_add,
+            task5_image2,
+            task5_image3,
+            task5_image4,
+            task5_image5,
         )
         add_task_if_valid(
-            6, prompt6, task6_image1, task6_image_add, task6_image2, task6_image3, task6_image4, task6_image5
+            6,
+            prompt6,
+            task6_image1,
+            task6_image_add,
+            task6_image2,
+            task6_image3,
+            task6_image4,
+            task6_image5,
         )
 
         if not tasks:
@@ -478,7 +579,9 @@ class SeedreamImageGenerateExecutor:
 
             except Exception as e:
                 is_timeout = self.is_timeout_error(e)
-                print(f"任务 {t_idx} 执行失败 (attempt={attempt_no}, timeout={is_timeout}): {str(e)}")
+                print(
+                    f"任务 {t_idx} 执行失败 (attempt={attempt_no}, timeout={is_timeout}): {str(e)}"
+                )
                 return {
                     "index": t_idx,
                     "ok": False,
@@ -496,10 +599,15 @@ class SeedreamImageGenerateExecutor:
             if max_workers <= 0:
                 return results
 
-            print(f"🔧 并行执行 Seedream 任务数: {len(task_list)} (max_workers={max_workers}, attempt={attempt_no})")
+            print(
+                f"🔧 并行执行 Seedream 任务数: {len(task_list)} (max_workers={max_workers}, attempt={attempt_no})"
+            )
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(run_single_task, task, attempt_no): task["index"] for task in task_list}
+                futures = {
+                    executor.submit(run_single_task, task, attempt_no): task["index"]
+                    for task in task_list
+                }
                 for future in as_completed(futures):
                     results.append(future.result())
             return results
@@ -511,7 +619,9 @@ class SeedreamImageGenerateExecutor:
         # 注意：普通失败不会自动重试；这是为了避免超大图、参数错误等确定性失败被反复请求。
         if enable_auto_retry and self.max_retries > 0:
             for retry_round in range(self.max_retries):
-                timeout_failures = [r for r in all_results if (not r.get("ok")) and r.get("is_timeout")]
+                timeout_failures = [
+                    r for r in all_results if (not r.get("ok")) and r.get("is_timeout")
+                ]
                 if len(timeout_failures) <= ignore_failure:
                     break
 
@@ -545,7 +655,10 @@ class SeedreamImageGenerateExecutor:
 
         if not success_results and not should_add_placeholders:
             # 所有任务都失败，但失败数没有超过 ignore_failure 的极端情况，一般只会出现在 ignore_failure >= 任务数。
-            return ([], f"⚠️ 所有任务均失败，但失败数未超过 ignore_failure={ignore_failure}，因此不返回占位图。")
+            return (
+                [],
+                f"⚠️ 所有任务均失败，但失败数未超过 ignore_failure={ignore_failure}，因此不返回占位图。",
+            )
 
         all_output_tensors = []
         all_result_texts = [
@@ -701,7 +814,9 @@ class SeedreamImageGenerateExecutor:
 
             if not image_urls:
                 # 如果没有图像，使用默认示例
-                image_urls = ["https://bimoai-sh.oss-cn-shanghai.aliyuncs.com/greenscreen/tmpl/0/mask_default.png"]
+                image_urls = [
+                    "https://bimoai-sh.oss-cn-shanghai.aliyuncs.com/greenscreen/tmpl/0/mask_default.png"
+                ]
 
             # Convert aspect ratio to size
             size = self.aspect_ratio_to_size(aspect_ratio)
@@ -740,11 +855,16 @@ class SeedreamImageGenerateExecutor:
             result_info.append(
                 f"📊 输入图像: {len([img for img in [image1, image2, image3, image4, image5, image6] if img is not None])}"
             )
-            result_info.append(f"🔄 本地图像模式: {'Base64编码' if use_local_images else '示例图像'}")
             result_info.append(
-                f"🎲 种子值: {normalized_seed}" + (f" (原始: {seed})" if seed != normalized_seed else "")
+                f"🔄 本地图像模式: {'Base64编码' if use_local_images else '示例图像'}"
             )
-            result_info.append(f"⚡ 执行状态: 成功 (自动重试: {'启用' if enable_auto_retry else '禁用'})")
+            result_info.append(
+                f"🎲 种子值: {normalized_seed}"
+                + (f" (原始: {seed})" if seed != normalized_seed else "")
+            )
+            result_info.append(
+                f"⚡ 执行状态: 成功 (自动重试: {'启用' if enable_auto_retry else '禁用'})"
+            )
             result_info.append("")
 
             for i, image_data in enumerate(images_response.data):
@@ -786,7 +906,9 @@ class SeedreamImageGenerateExecutor:
 
             if not output_tensors:
                 # 不在单任务内返回占位图；统一交给 generate_images 根据 ignore_failure 决定。
-                api_error = getattr(getattr(images_response, "error", None), "message", "API未返回任何图像")
+                api_error = getattr(
+                    getattr(images_response, "error", None), "message", "API未返回任何图像"
+                )
                 raise RuntimeError(f"任务未生成任何图像: {api_error}")
 
             # Join all info into a single text output
@@ -879,7 +1001,8 @@ class SeedreamImageGenerateExecutor:
                     f"🖼️ 最大图像数: {max_images}",
                     f"🌐 API地址: {base_url}",
                     f"🧪 使用本地图像: {'是' if use_local_images else '否'}",
-                    f"🎲 种子值: {normalized_seed}" + (f" (原始: {seed})" if seed != normalized_seed else ""),
+                    f"🎲 种子值: {normalized_seed}"
+                    + (f" (原始: {seed})" if seed != normalized_seed else ""),
                     "",
                     "💡 故障排除步骤:",
                     "   1. 检查所有节点连接是否正确",

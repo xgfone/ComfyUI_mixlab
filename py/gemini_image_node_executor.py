@@ -49,8 +49,7 @@ class GeminiImageGenerateExecutor:
                     ],
                     {"default": "1:1"},
                 ),
-                "image_size":(["1K","2K","4K"],{"default": "1K"}),
-
+                "image_size": (["1K", "2K", "4K"], {"default": "1K"}),
                 "sequential_image_generation": (
                     ["auto", "enabled", "disabled"],
                     {"default": "auto"},
@@ -794,7 +793,7 @@ class GeminiImageGenerateExecutor:
                 "contents": [{"role": "user", "parts": parts}],
                 "generationConfig": {
                     "responseModalities": ["TEXT", "IMAGE"],
-                    "ImageConfig":{"aspectRatio": aspect_ratio, "imageSize": image_size},
+                    "ImageConfig": {"aspectRatio": aspect_ratio, "imageSize": image_size},
                 },
             }
             request_url = self.build_generate_content_url(base_url, model)

@@ -23,16 +23,42 @@ class SeedreamImageGenerateConcurrent:
             "required": {
                 "prompt": (
                     "STRING",
-                    {"multiline": True, "default": "", "placeholder": "Enter your image generation prompt here..."},
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "placeholder": "Enter your image generation prompt here...",
+                    },
                 ),
                 "image1": ("IMAGE",),
-                "model": (["doubao-seedream-4-0-250828"], {"default": "doubao-seedream-4-0-250828"}),
+                "model": (
+                    ["doubao-seedream-4-0-250828"],
+                    {"default": "doubao-seedream-4-0-250828"},
+                ),
                 "aspect_ratio": (
-                    ["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16", "21:9", "2K", "3K", "3.5K", "4K"],
+                    [
+                        "1:1",
+                        "2:3",
+                        "3:2",
+                        "4:3",
+                        "3:4",
+                        "16:9",
+                        "9:16",
+                        "21:9",
+                        "2K",
+                        "3K",
+                        "3.5K",
+                        "4K",
+                    ],
                     {"default": "1:1"},
                 ),
-                "sequential_image_generation": (["auto", "enabled", "disabled"], {"default": "auto"}),
-                "batch_size": ("INT", {"default": 1, "min": 1, "max": 5, "step": 1, "tooltip": "并发请求数量"}),
+                "sequential_image_generation": (
+                    ["auto", "enabled", "disabled"],
+                    {"default": "auto"},
+                ),
+                "batch_size": (
+                    "INT",
+                    {"default": 1, "min": 1, "max": 5, "step": 1, "tooltip": "并发请求数量"},
+                ),
                 "max_images": (
                     "INT",
                     {
@@ -48,18 +74,39 @@ class SeedreamImageGenerateConcurrent:
                 "watermark": ("BOOLEAN", {"default": False}),
                 "stream": ("BOOLEAN", {"default": False}),
                 "base_url": ("STRING", {"default": "https://ark.cn-beijing.volces.com/api/v3"}),
-                "use_local_images": ("BOOLEAN", {"default": True, "tooltip": "使用本地图像（Base64格式）"}),
+                "use_local_images": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "使用本地图像（Base64格式）"},
+                ),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 18446744073709551615, "step": 1}),
-                "enable_auto_retry": ("BOOLEAN", {"default": True, "tooltip": "启用输入验证的自动重试"}),
+                "enable_auto_retry": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "启用输入验证的自动重试"},
+                ),
             },
             "optional": {
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
                 "image4": ("IMAGE",),
                 "image5": ("IMAGE",),
-                "timeout": ("INT", {"default": 70, "min": 10, "max": 300, "step": 1, "tooltip": "最大等待时间(秒)。"}),
-                "max_retries": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "协程最大重试次数。"}),
-                "ARK_max_retries": ("INT", {"min": 0, "max": 5, "step": 1, "tooltip": "单次任务最大重试次数。"}),
+                "timeout": (
+                    "INT",
+                    {
+                        "default": 70,
+                        "min": 10,
+                        "max": 300,
+                        "step": 1,
+                        "tooltip": "最大等待时间(秒)。",
+                    },
+                ),
+                "max_retries": (
+                    "INT",
+                    {"default": 0, "min": 0, "max": 5, "step": 1, "tooltip": "协程最大重试次数。"},
+                ),
+                "ARK_max_retries": (
+                    "INT",
+                    {"min": 0, "max": 5, "step": 1, "tooltip": "单次任务最大重试次数。"},
+                ),
             },
         }
 
@@ -167,7 +214,9 @@ class SeedreamImageGenerateConcurrent:
         api_key = os.environ.get("ARK_API_KEY")
         if not api_key:
             raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
-        self.client = Ark(base_url=base_url, api_key=api_key.strip(), timeout=timeout, max_retries=max_retries)
+        self.client = Ark(
+            base_url=base_url, api_key=api_key.strip(), timeout=timeout, max_retries=max_retries
+        )
 
     async def generate_images(
         self,
@@ -221,7 +270,9 @@ class SeedreamImageGenerateConcurrent:
             image_urls.append(url)
 
         if not image_urls:
-            image_urls = ["https://ark-project.tos-cn-beijing.volces.com/doc_image/seedream4_imagesToimages_1.png"]
+            image_urls = [
+                "https://ark-project.tos-cn-beijing.volces.com/doc_image/seedream4_imagesToimages_1.png"
+            ]
 
         size = self.aspect_ratio_to_size(aspect_ratio)
         generation_options = SequentialImageGenerationOptions(max_images=max_images)
@@ -229,7 +280,11 @@ class SeedreamImageGenerateConcurrent:
         # --- 3. 定义单个任务逻辑 ---
         async def process_single_batch(task_index, current_try_seed):
             # 确保 Seed 不溢出
-            normalized_seed = current_try_seed if current_try_seed <= 2147483647 else current_try_seed % 2147483647
+            normalized_seed = (
+                current_try_seed
+                if current_try_seed <= 2147483647
+                else current_try_seed % 2147483647
+            )
 
             task_log = []
             task_tensors = []
@@ -255,13 +310,16 @@ class SeedreamImageGenerateConcurrent:
                     ),
                 )
 
-                task_log.append(f"✅ 任务 {task_index + 1} 成功，API返回 {len(images_response.data)} 张图")
+                task_log.append(
+                    f"✅ 任务 {task_index + 1} 成功，API返回 {len(images_response.data)} 张图"
+                )
 
                 # 下载图片
                 async with aiohttp.ClientSession() as session:
                     if response_format == "url":
                         download_tasks = [
-                            self._download_image_async(session, item.url) for item in images_response.data
+                            self._download_image_async(session, item.url)
+                            for item in images_response.data
                         ]
                         downloaded_results = await asyncio.gather(*download_tasks)
                         # 过滤下载失败的 None
@@ -307,7 +365,10 @@ class SeedreamImageGenerateConcurrent:
                 current_batch_seed = seed
 
             # 创建任务列表
-            tasks = [asyncio.create_task(process_single_batch(i, current_batch_seed + i)) for i in range(batch_size)]
+            tasks = [
+                asyncio.create_task(process_single_batch(i, current_batch_seed + i))
+                for i in range(batch_size)
+            ]
 
             print(f"⏳ [第{attempt + 1}轮] 开始并发执行，超时设定: {timeout}秒...")
 

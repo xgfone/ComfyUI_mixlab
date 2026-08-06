@@ -361,7 +361,7 @@ class BimoAISegmentImage:
                         return (
                             result_url,
                             task_id,
-                            json.dumps(query_response,ensure_ascii=False,indent=2),
+                            json.dumps(query_response, ensure_ascii=False, indent=2),
                         )
 
                     if status in TERMINAL_ERROR_STATUSES:

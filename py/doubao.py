@@ -109,7 +109,9 @@ def _get_api_key(cfg: Dict[str, Any]) -> str:
             return env_key
     key = (cfg.get("ARK_API_KEY") or "").strip()
     if not key or key == "your_api_key":
-        raise ValueError("[DoubaoNodeSDKv2] Missing ARK_API_KEY. Set env ARK_API_KEY or config.json.")
+        raise ValueError(
+            "[DoubaoNodeSDKv2] Missing ARK_API_KEY. Set env ARK_API_KEY or config.json."
+        )
     return key
 
 
@@ -270,16 +272,25 @@ class DoubaoSingleTurnChatNodeSDKv2:
                         "tooltip": "Ark inference endpoint id (e.g., ep-xxx). Some tenants may allow model-name.",
                     },
                 ),
-                "user_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "Ask Doubao something..."}),
+                "user_prompt": (
+                    "STRING",
+                    {"default": "", "multiline": True, "placeholder": "Ask Doubao something..."},
+                ),
                 "max_tokens": ("INT", {"default": max_tokens, "min": 1, "max": 8192, "step": 1}),
-                "temperature": ("FLOAT", {"default": temperature, "min": 0.0, "max": 2.0, "step": 0.01}),
+                "temperature": (
+                    "FLOAT",
+                    {"default": temperature, "min": 0.0, "max": 2.0, "step": 0.01},
+                ),
                 "top_p": ("FLOAT", {"default": top_p, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "deep_thinking": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "timeout": ("INT", {"default": 600, "tooltip": "超时时间，单位秒"}),
                 "max_retries": ("INT", {"default": 2, "tooltip": "最大重试次数"}),
-                "system_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "system prompt"}),
+                "system_prompt": (
+                    "STRING",
+                    {"default": "", "multiline": True, "placeholder": "system prompt"},
+                ),
                 "image_1": ("IMAGE",),
                 "image_2": ("IMAGE",),
                 "image_3": ("IMAGE",),
@@ -308,7 +319,9 @@ class DoubaoSingleTurnChatNodeSDKv2:
     ):
         model = (model or "").strip()
         if not model:
-            raise ValueError("[DoubaoNodeSDKv2] 'model' is required. Usually an ep-xxxx inference endpoint id.")
+            raise ValueError(
+                "[DoubaoNodeSDKv2] 'model' is required. Usually an ep-xxxx inference endpoint id."
+            )
 
         if not isinstance(user_prompt, str) or not user_prompt.strip():
             return ("",)

@@ -110,12 +110,16 @@ class RasterCardMaker:
             # 竖纹：按列交错
             for x in range(0, raster_width_px, stripe_px * 2):
                 output[:, x : x + stripe_px] = arr1[:, x : x + stripe_px]
-                output[:, x + stripe_px : x + 2 * stripe_px] = arr2[:, x + stripe_px : x + 2 * stripe_px]
+                output[:, x + stripe_px : x + 2 * stripe_px] = arr2[
+                    :, x + stripe_px : x + 2 * stripe_px
+                ]
         elif direction == "horizontal":
             # 横纹：按行交错
             for y in range(0, raster_height_px, stripe_px * 2):
                 output[y : y + stripe_px, :] = arr1[y : y + stripe_px, :]
-                output[y + stripe_px : y + 2 * stripe_px, :] = arr2[y + stripe_px : y + 2 * stripe_px, :]
+                output[y + stripe_px : y + 2 * stripe_px, :] = arr2[
+                    y + stripe_px : y + 2 * stripe_px, :
+                ]
         else:
             raise ValueError("direction must be [vertical] or [horizontal]")
 

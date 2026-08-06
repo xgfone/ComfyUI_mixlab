@@ -290,7 +290,10 @@ def _fit_font_to_canvas(
     while low <= high:
         mid = (low + high) // 2
         layout = make_layout(mid)
-        if layout["max_width"] <= layout["usable_width"] and layout["total_height"] <= layout["usable_height"]:
+        if (
+            layout["max_width"] <= layout["usable_width"]
+            and layout["total_height"] <= layout["usable_height"]
+        ):
             best = layout
             low = mid + 1
         else:

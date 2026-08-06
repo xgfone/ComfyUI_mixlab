@@ -11,7 +11,9 @@ class AutoGamma:
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "execute"
     CATEGORY = "MagickWand/Enhance"
-    DESCRIPTION = "Automatically adjusts the gamma level of the image so the mean brightness becomes 0.5."
+    DESCRIPTION = (
+        "Automatically adjusts the gamma level of the image so the mean brightness becomes 0.5."
+    )
 
     def execute(self, image):
         # image 格式为 [batch, height, width, channels]
