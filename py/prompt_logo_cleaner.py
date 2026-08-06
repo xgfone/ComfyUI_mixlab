@@ -4,7 +4,7 @@
 import os.path
 import re
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class PromptLogoCleaner:

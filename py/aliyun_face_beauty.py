@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from PIL import Image, UnidentifiedImageError
 
-from .py.util.aliyun_facebody_http import (
+from .util.aliyun_facebody_http import (
     AliyunFaceBodyError,
     AliyunFaceBodyHTTPClient,
     resolve_aliyun_credentials,

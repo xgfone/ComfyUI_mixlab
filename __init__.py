@@ -1,25 +1,25 @@
-from .aliyun_face_beauty import AliyunFaceBeautyNode
-from .auto_gamma import AutoGamma
-from .bimoai_segment_node import BimoAISegmentImage
-from .bimoai_text_split import BimoAITextSplitIndex
-from .chroma_key import ChromaKeyNode
-from .color_ratio_node import ColorRatioCalculator
-from .corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
-from .doubao import DoubaoSingleTurnChatNodeSDKv2
-from .face2mask import FaceToMaskCopy
-from .garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
-from .gemini_image_node_executor import GeminiImageGenerateExecutor
-from .gpt_image_2 import GPTImage2Generator
-from .load_image_from_url import LoadImageAndMaskFromUrl
-from .mask_sort import MaskSorter
-from .prompt_logo_cleaner import PromptLogoCleaner
-from .raster_card_maker import RasterCardMaker
-from .seedream_concurrent import SeedreamImageGenerateConcurrent
-from .seedream_node_executor import SeedreamImageGenerateExecutor
-from .split_string import SplitString
-from .switch_case_node import SwitchCaseNodePro
-from .was_text_shuffle import WASTextShuffle
-from .zho_text_image import Text_Image_Multiline_Zho_autofit, Text_Image_Zho_autofit
+from .py.aliyun_face_beauty import AliyunFaceBeautyNode
+from .py.auto_gamma import AutoGamma
+from .py.bimoai_segment_node import BimoAISegmentImage
+from .py.bimoai_text_split import BimoAITextSplitIndex
+from .py.chroma_key import ChromaKeyNode
+from .py.color_ratio_node import ColorRatioCalculator
+from .py.corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
+from .py.doubao import DoubaoSingleTurnChatNodeSDKv2
+from .py.face2mask import FaceToMaskCopy
+from .py.garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
+from .py.gemini_image_node_executor import GeminiImageGenerateExecutor
+from .py.gpt_image_2 import GPTImage2Generator
+from .py.load_image_from_url import LoadImageAndMaskFromUrl
+from .py.mask_sort import MaskSorter
+from .py.prompt_logo_cleaner import PromptLogoCleaner
+from .py.raster_card_maker import RasterCardMaker
+from .py.seedream_concurrent import SeedreamImageGenerateConcurrent
+from .py.seedream_node_executor import SeedreamImageGenerateExecutor
+from .py.split_string import SplitString
+from .py.switch_case_node import SwitchCaseNodePro
+from .py.was_text_shuffle import WASTextShuffle
+from .py.zho_text_image import Text_Image_Multiline_Zho_autofit, Text_Image_Zho_autofit
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 

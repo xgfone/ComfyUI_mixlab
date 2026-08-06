@@ -31,7 +31,7 @@ F_SET = "sets.txt"
 # 简单缓存，避免每次都读盘
 _RULE_CACHE = {}
 
-_ROOT_DIR = os.path.dirname(__file__)
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _normalize(s: str) -> str:

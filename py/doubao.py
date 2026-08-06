@@ -21,7 +21,7 @@ Setup
 
 4) Credentials:
    - Prefer setting environment variable: ARK_API_KEY
-   - Or edit the generated config.json next to this file:
+   - Or edit the generated config.json in the project root:
        {
          "ARK_API_KEY": "your_api_key",
          "base_url": "https://ark.cn-beijing.volces.com/api/v3",
@@ -62,8 +62,8 @@ except Exception as _e:
 
 
 def _config_path() -> str:
-    here = os.path.dirname(__file__)
-    return os.path.join(os.path.abspath(here), "config.json")
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(project_dir, "config.json")
 
 
 def _default_config() -> Dict[str, Any]:

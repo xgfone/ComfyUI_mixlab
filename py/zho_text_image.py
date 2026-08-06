@@ -11,8 +11,8 @@ import torch
 from PIL import Image, ImageDraw, ImageFont
 
 # ----------------------------------------------------------------------------
-here = Path(__file__).parent.absolute()
-comfy_dir = here.parent.parent
+project_dir = Path(__file__).resolve().parent.parent
+comfy_dir = project_dir.parent.parent
 
 
 # ----------------------------------------------------------------------------
