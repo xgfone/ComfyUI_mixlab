@@ -1,9 +1,8 @@
 torch
 numpy
 pillow
-opencv-python
-requests
 aiohttp
+requests
 
 # doubao
 volcengine-python-sdk[ark]
