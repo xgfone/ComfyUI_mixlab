@@ -303,3 +303,7 @@ class BIMO_CornerPinPerspective:
         if preview_images:
             return {"ui": {"images": preview_images}, "result": (out_image, out_mask)}
         return (out_image, out_mask)
+
+
+NODE_CLASS_MAPPINGS = {"BIMO_CornerPinPerspective": BIMO_CornerPinPerspective}
+NODE_DISPLAY_NAME_MAPPINGS = {"BIMO_CornerPinPerspective": "Corner Pin / Perspective Warp"}

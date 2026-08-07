@@ -1,47 +1,40 @@
 # -*- coding: utf-8 -*-
 
-from .py.aliyun_face_beauty import AliyunFaceBeautyNode
-from .py.auto_gamma import AutoGamma
-from .py.bimoai_segment_node import BimoAISegmentImage
-from .py.chroma_key import ChromaKeyNode
-from .py.corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
-from .py.doubao import DoubaoSingleTurnChatNodeSDKv2
-from .py.garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
-from .py.gemini_image_node_executor import GeminiImageGenerateExecutor
-from .py.gpt_image_2 import GPTImage2Generator
-from .py.seedream_concurrent import SeedreamImageGenerateConcurrent
-from .py.seedream_node_executor import SeedreamImageGenerateExecutor
+from importlib import import_module
+from pkgutil import iter_modules
+
+from . import py as _node_package
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 
-NODE_CLASS_MAPPINGS = {
-    "AliyunFaceBeauty": AliyunFaceBeautyNode,
-    "AutoGamma": AutoGamma,
-    "BIMO_CornerPinPerspective": BIMO_CornerPinPerspective,
-    "BimoAISegmentImage": BimoAISegmentImage,
-    "ChromaKey": ChromaKeyNode,
-    "DoubaoSingleTurnChatNodeSDKv2": DoubaoSingleTurnChatNodeSDKv2,
-    "GarmentCategoryMapper": GarmentCategoryMapper,
-    "GarmentCategoryMapperBatch": GarmentCategoryMapperBatch,
-    "GeminiImageGenerate": GeminiImageGenerateExecutor,
-    "GPTImage2Generator": GPTImage2Generator,
-    "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
-    "SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor,
-}
+WEB_DIRECTORY = "./js"
+
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
 
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
-    "AutoGamma": "Auto Gamma",
-    "BIMO_CornerPinPerspective": "Corner Pin / Perspective Warp",
-    "BimoAISegmentImage": "BimoAI Image Segment",
-    "ChromaKey": "Chroma Key",
-    "DoubaoSingleTurnChatNodeSDKv2": "Doubao Chat (Single Turn, Ark SDK)",
-    "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
-    "GarmentCategoryMapperBatch": "Garment Category Mapper (Batch)",
-    "GeminiImageGenerate": "Gemini Image Generator",
-    "GPTImage2Generator": "OpenAI GPT Image 2",
-    "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)",
-    "SeedreamImageGenerateExecutor": "Seedream Image Generate Executor",
-}
+def _load_node_mappings():
+    """Load mappings from Python modules directly inside the ``py`` package."""
+    modules = sorted(
+        iter_modules(_node_package.__path__, f"{_node_package.__name__}."),
+        key=lambda module_info: module_info.name,
+    )
+
+    for module_info in modules:
+        # Only load py/*.py. In particular, do not recurse into py/util/.
+        if module_info.ispkg:
+            continue
+
+        module = import_module(module_info.name)
+
+        class_mappings = getattr(module, "NODE_CLASS_MAPPINGS", None)
+        if class_mappings is not None:
+            NODE_CLASS_MAPPINGS.update(class_mappings)
+
+        display_name_mappings = getattr(module, "NODE_DISPLAY_NAME_MAPPINGS", None)
+        if display_name_mappings is not None:
+            NODE_DISPLAY_NAME_MAPPINGS.update(display_name_mappings)
+
+
+_load_node_mappings()

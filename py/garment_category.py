@@ -180,3 +180,13 @@ class GarmentCategoryMapperBatch:
             code, matched = map_category_impl(ln, rules_dir)
             results.append({"name": ln, "code": int(code), "matched": matched})
         return (json.dumps(results, ensure_ascii=False),)
+
+
+NODE_CLASS_MAPPINGS = {
+    "GarmentCategoryMapper": GarmentCategoryMapper,
+    "GarmentCategoryMapperBatch": GarmentCategoryMapperBatch,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "GarmentCategoryMapper": "Garment Category Mapper (1/2/3)",
+    "GarmentCategoryMapperBatch": "Garment Category Mapper (Batch)",
+}

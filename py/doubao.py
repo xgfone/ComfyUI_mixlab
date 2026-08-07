@@ -361,3 +361,7 @@ class DoubaoSingleTurnChatNodeSDKv2:
             timeout=timeout,
         )
         return (text,)
+
+
+NODE_CLASS_MAPPINGS = {"DoubaoSingleTurnChatNodeSDKv2": DoubaoSingleTurnChatNodeSDKv2}
+NODE_DISPLAY_NAME_MAPPINGS = {"DoubaoSingleTurnChatNodeSDKv2": "Doubao Chat (Single Turn, Ark SDK)"}

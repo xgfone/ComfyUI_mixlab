@@ -389,5 +389,4 @@ class ChromaKeyNode:
 
 
 NODE_CLASS_MAPPINGS = {"ChromaKey": ChromaKeyNode}
-
 NODE_DISPLAY_NAME_MAPPINGS = {"ChromaKey": "Chroma Key"}

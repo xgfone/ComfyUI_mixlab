@@ -662,3 +662,7 @@ def _truncate(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
     return value[:limit] + "..."
+
+
+NODE_CLASS_MAPPINGS = {"BimoAISegmentImage": BimoAISegmentImage}
+NODE_DISPLAY_NAME_MAPPINGS = {"BimoAISegmentImage": "BimoAI Image Segment"}

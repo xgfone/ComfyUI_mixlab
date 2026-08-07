@@ -1034,3 +1034,7 @@ class SeedreamImageGenerateExecutor:
 
             # 不在单任务内返回错误占位图；统一交给 generate_images 根据 ignore_failure 决定。
             raise RuntimeError(error_text) from e
+
+
+NODE_CLASS_MAPPINGS = {"SeedreamImageGenerateExecutor": SeedreamImageGenerateExecutor}
+NODE_DISPLAY_NAME_MAPPINGS = {"SeedreamImageGenerateExecutor": "Seedream Image Generate Executor"}

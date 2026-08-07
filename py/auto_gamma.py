@@ -37,3 +37,7 @@ class AutoGamma:
         result = torch.pow(image, exponents)
 
         return (result,)
+
+
+NODE_CLASS_MAPPINGS = {"AutoGamma": AutoGamma}
+NODE_DISPLAY_NAME_MAPPINGS = {"AutoGamma": "Auto Gamma"}

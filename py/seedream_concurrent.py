@@ -425,3 +425,11 @@ class SeedreamImageGenerateConcurrent:
             final_tensor = torch.cat(final_valid_tensors, dim=0)
 
         return (final_tensor, "\n".join(all_logs))
+
+
+NODE_CLASS_MAPPINGS = {
+    "SeedreamImageGenerateConcurrent": SeedreamImageGenerateConcurrent,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "SeedreamImageGenerateConcurrent": "Seedream Image Generate (Concurrent)"
+}

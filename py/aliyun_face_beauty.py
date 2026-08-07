@@ -173,3 +173,7 @@ class AliyunFaceBeautyNode:
             image.load()
             image_array = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
         return torch.from_numpy(image_array.copy()).unsqueeze(0)
+
+
+NODE_CLASS_MAPPINGS = {"AliyunFaceBeauty": AliyunFaceBeautyNode}
+NODE_DISPLAY_NAME_MAPPINGS = {"AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)"}
