@@ -8,7 +8,6 @@ from .py.chroma_key import ChromaKeyNode
 from .py.color_ratio_node import ColorRatioCalculator
 from .py.corner_pin import WEB_DIRECTORY, BIMO_CornerPinPerspective
 from .py.doubao import DoubaoSingleTurnChatNodeSDKv2
-from .py.face2mask import FaceToMaskCopy
 from .py.garment_category import GarmentCategoryMapper, GarmentCategoryMapperBatch
 from .py.gemini_image_node_executor import GeminiImageGenerateExecutor
 from .py.gpt_image_2 import GPTImage2Generator
@@ -30,7 +29,6 @@ NODE_CLASS_MAPPINGS = {
     "AutoGamma": AutoGamma,
     "ChromaKey": ChromaKeyNode,
     "MaskSorter": MaskSorter,
-    "FaceToMaskCopy": FaceToMaskCopy,
     "SwitchCaseNodePro": SwitchCaseNodePro,
     "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
@@ -59,7 +57,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ColorRatioCalculator": "Color Ratio Calculator",
     "ChromaKey": "Chroma Key",
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
-    "FaceToMaskCopy": "Face To Mask(Copy)",
     "SwitchCaseNodePro": "Switch Case Node Pro",
     "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
