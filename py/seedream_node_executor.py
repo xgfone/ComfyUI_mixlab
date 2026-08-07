@@ -8,7 +8,10 @@ import requests
 import torch
 from PIL import Image
 from volcenginesdkarkruntime import Ark
-from volcenginesdkarkruntime.types.images.images import SequentialImageGenerationOptions
+from volcenginesdkarkruntime.types.images.images import (
+    OptimizePromptOptions,
+    SequentialImageGenerationOptions,
+)
 
 
 class SeedreamImageGenerateExecutor:
@@ -176,6 +179,7 @@ class SeedreamImageGenerateExecutor:
                 "task6_image4": ("IMAGE",),
                 "task6_image5": ("IMAGE",),
                 "task6_image_add": ("IMAGE",),
+                "optimize_prompt_options": ("STRING", ["standard", "fast"], {"default": "fast"}),
             },
         }
 
@@ -423,6 +427,7 @@ class SeedreamImageGenerateExecutor:
         task6_image4=None,
         task6_image5=None,
         task6_image_add=None,
+        optimize_prompt_options=None,
     ):
         """
         支持最多 6 个任务的并行执行：
@@ -567,6 +572,7 @@ class SeedreamImageGenerateExecutor:
                     t_image4,
                     t_image5,
                     t_image6,
+                    optimize_prompt_options,
                 )
 
                 return {
@@ -726,6 +732,7 @@ class SeedreamImageGenerateExecutor:
         image4=None,
         image5=None,
         image6=None,
+        optimize_prompt_options=None,
     ):
         """
         实际执行图像生成的核心逻辑
@@ -823,10 +830,12 @@ class SeedreamImageGenerateExecutor:
 
             # Prepare generation options
             generation_options = SequentialImageGenerationOptions(max_images=max_images)
+            optimize_prompt_options = None
 
             if model == "doubao-seedream-5-0-pro-260628":
                 sequential_image_generation = None
                 generation_options = None
+                optimize_prompt_options = OptimizePromptOptions(mode=optimize_prompt_options)
 
             # Generate images
             images_response = self.client.images.generate(
@@ -839,6 +848,7 @@ class SeedreamImageGenerateExecutor:
                 response_format=response_format,
                 watermark=watermark,
                 stream=stream,
+                optimize_prompt_options=optimize_prompt_options,
             )
 
             # Process generated images and collect information
