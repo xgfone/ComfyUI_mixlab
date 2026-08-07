@@ -15,7 +15,6 @@ from .py.gpt_image_2 import GPTImage2Generator
 from .py.load_image_from_url import LoadImageAndMaskFromUrl
 from .py.mask_sort import MaskSorter
 from .py.prompt_logo_cleaner import PromptLogoCleaner
-from .py.raster_card_maker import RasterCardMaker
 from .py.seedream_concurrent import SeedreamImageGenerateConcurrent
 from .py.seedream_node_executor import SeedreamImageGenerateExecutor
 from .py.split_string import SplitString
@@ -33,7 +32,6 @@ NODE_CLASS_MAPPINGS = {
     "MaskSorter": MaskSorter,
     "FaceToMaskCopy": FaceToMaskCopy,
     "SwitchCaseNodePro": SwitchCaseNodePro,
-    "RasterCardMaker": RasterCardMaker,
     "AliyunFaceBeauty": AliyunFaceBeautyNode,
     "PromptLogoCleaner": PromptLogoCleaner,
     "GPTImage2Generator": GPTImage2Generator,
@@ -63,7 +61,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MaskSorter": "🧩 Mask Sorter (多蒙版排序)",
     "FaceToMaskCopy": "Face To Mask(Copy)",
     "SwitchCaseNodePro": "Switch Case Node Pro",
-    "RasterCardMaker": "Raster Card Maker",
     "AliyunFaceBeauty": "Aliyun Face Beauty (Retouch)",
     "PromptLogoCleaner": "Prompt Logo Cleaner (Remove Logo Words)",
     "LoadImageAndMaskFromUrl": "Load Image And Mask From Url",
