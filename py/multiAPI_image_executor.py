@@ -16,38 +16,8 @@ TASK_TYPE = "MULTIAPI_IMAGE_TASK"
 CATEGORY = "MultiAPI Image Executor"
 
 
-@dataclass(frozen=True)
-class ImageGenerationTask:
-    provider: str
-    prompt: str
-    images: Tuple[torch.Tensor, ...]
-    params: Dict[str, Any]
-
-
-def _images(kwargs):
-    result = []
-    for index in range(1, 7):
-        image = kwargs.get(f"image{index}")
-        if image is not None:
-            result.append(image)
-    return tuple(result)
-
-
-def _task(provider, prompt, params, kwargs):
-    prompt = str(prompt or "").strip()
-    if not prompt:
-        raise ValueError("提示词不能为空")
-    images = _images(kwargs)
-    if not images:
-        raise ValueError("至少需要一张参考图")
-    clean_params = {
-        key: value for key, value in params.items() if not re.fullmatch(r"image\d+", key)
-    }
-    return (ImageGenerationTask(provider, prompt, images, clean_params),)
-
-
-def _optional_images():
-    return {f"image{i}": ("IMAGE",) for i in range(2, 7)}
+#############################################################################
+## GenTask Start
 
 
 class GeminiImageGenTask:
@@ -185,6 +155,44 @@ class GPTImageGenTask:
 
     def submit(self, prompt, image1, **kwargs):
         return _task("gpt_image", prompt, kwargs, {"image1": image1, **kwargs})
+
+
+## GenTask End
+#############################################################################
+
+
+@dataclass(frozen=True)
+class ImageGenerationTask:
+    provider: str
+    prompt: str
+    images: Tuple[torch.Tensor, ...]
+    params: Dict[str, Any]
+
+
+def _images(kwargs):
+    result = []
+    for index in range(1, 7):
+        image = kwargs.get(f"image{index}")
+        if image is not None:
+            result.append(image)
+    return tuple(result)
+
+
+def _task(provider, prompt, params, kwargs):
+    prompt = str(prompt or "").strip()
+    if not prompt:
+        raise ValueError("提示词不能为空")
+    images = _images(kwargs)
+    if not images:
+        raise ValueError("至少需要一张参考图")
+    clean_params = {
+        key: value for key, value in params.items() if not re.fullmatch(r"image\d+", key)
+    }
+    return (ImageGenerationTask(provider, prompt, images, clean_params),)
+
+
+def _optional_images():
+    return {f"image{i}": ("IMAGE",) for i in range(2, 7)}
 
 
 def _pil(tensor):
