@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple
 
+# import tuple
 import numpy as np
 import requests
 import torch
@@ -88,19 +89,16 @@ class SeedreamImageGenTask:
                 "aspect_ratio": (
                     [
                         "1:1",
-                        "2:3",
-                        "3:2",
                         "4:3",
                         "3:4",
                         "16:9",
                         "9:16",
+                        "3:2",
+                        "2:3",
                         "21:9",
-                        "2K",
-                        "3K",
-                        "3.5K",
-                        "4K",
                     ],
                 ),
+                "resolution": (["1K", "1.5K", "2K", "3K", "4K"], {"default": "2K"}),
                 "sequential_image_generation": (["auto", "enabled", "disabled"],),
                 "max_images": ("INT", {"default": 1, "min": 1, "max": 10}),
                 "response_format": (["url", "b64_json"],),
@@ -173,18 +171,22 @@ def _images(kwargs):
     result = []
     for index in range(1, 7):
         image = kwargs.get(f"image{index}")
-        if image is not None:
+        if image is None:
+            continue
+        shape = getattr(image, "shape", ())
+        if len(shape) < 3:
+            continue
+        height, width = int(shape[-3]), int(shape[-2])
+        if height >= 14 and width >= 14:
             result.append(image)
     return tuple(result)
 
 
 def _task(provider, prompt, params, kwargs):
     prompt = str(prompt or "").strip()
-    if not prompt:
-        raise ValueError("提示词不能为空")
     images = _images(kwargs)
-    if not images:
-        raise ValueError("至少需要一张参考图")
+    if prompt and not images:
+        raise ValueError("至少需要一张宽和高均不小于 14px 的参考图")
     clean_params = {
         key: value for key, value in params.items() if not re.fullmatch(r"image\d+", key)
     }
@@ -239,6 +241,84 @@ def _size(ratio):
         "3.5K": "2933x4400",
         "4K": "4096x4096",
     }.get(ratio, ratio)
+
+
+_SEEDREAM_STANDARD_SIZES = {
+    "1K": {
+        "1:1": "1024x1024",
+        "4:3": "1152x864",
+        "3:4": "864x1152",
+        "16:9": "1424x800",
+        "9:16": "800x1424",
+        "3:2": "1248x832",
+        "2:3": "832x1248",
+        "21:9": "1568x672",
+    },
+    "1.5K": {
+        "1:1": "1536x1536",
+        "4:3": "1792x1344",
+        "3:4": "1344x1792",
+        "16:9": "2048x1152",
+        "9:16": "1152x2048",
+        "3:2": "1872x1248",
+        "2:3": "1248x1872",
+        "21:9": "2352x1008",
+    },
+    "2K": {
+        "1:1": "2048x2048",
+        "4:3": "2304x1728",
+        "3:4": "1728x2304",
+        "16:9": "2848x1600",
+        "9:16": "1600x2848",
+        "3:2": "2496x1664",
+        "2:3": "1664x2496",
+        "21:9": "3136x1344",
+    },
+    "3K": {
+        "1:1": "3072x3072",
+        "4:3": "3456x2592",
+        "3:4": "2592x3456",
+        "16:9": "4096x2304",
+        "9:16": "2304x4096",
+        "3:2": "3744x2496",
+        "2:3": "2496x3744",
+        "21:9": "4704x2016",
+    },
+    "4K": {
+        "1:1": "4096x4096",
+        "4:3": "4704x3520",
+        "3:4": "3520x4704",
+        "16:9": "5504x3040",
+        "9:16": "3040x5504",
+        "3:2": "4992x3328",
+        "2:3": "3328x4992",
+        "21:9": "6240x2656",
+    },
+}
+
+_SEEDREAM_PRO_2K_SIZES = {
+    "1:1": "2048x2048",
+    "4:3": "2368x1776",
+    "3:4": "1776x2368",
+    "16:9": "2816x1584",
+    "9:16": "1584x2816",
+    "3:2": "2496x1664",
+    "2:3": "1664x2496",
+    "21:9": "3136x1344",
+}
+
+
+def _seedream_size(model, aspect_ratio, resolution):
+    if model == "doubao-seedream-5-0-pro-260628" and resolution == "2K":
+        sizes = _SEEDREAM_PRO_2K_SIZES
+    else:
+        sizes = _SEEDREAM_STANDARD_SIZES.get(resolution)
+    if not sizes or aspect_ratio not in sizes:
+        raise ValueError(
+            f"不支持的 Seedream 尺寸组合: model={model}, "
+            f"aspect_ratio={aspect_ratio}, resolution={resolution}"
+        )
+    return sizes[aspect_ratio]
 
 
 def _retry(task, operation):
@@ -368,6 +448,7 @@ def _seedream(task):
         raise RuntimeError("Seedream 需要安装 volcengine-python-sdk[ark]") from error
     client = Ark(base_url=p["base_url"], api_key=key.strip(), timeout=p["timeout"], max_retries=0)
     model = p["model"]
+    size = _seedream_size(model, p["aspect_ratio"], p["resolution"])
     sequential = p["sequential_image_generation"]
     options = SequentialImageGenerationOptions(max_images=p["max_images"])
     extra = {}
@@ -378,7 +459,7 @@ def _seedream(task):
         model=model,
         prompt=task.prompt,
         image=[_png_data_url(image) for image in task.images],
-        size=_size(p["aspect_ratio"]),
+        size=size,
         sequential_image_generation=sequential,
         sequential_image_generation_options=options,
         response_format=p["response_format"],
@@ -396,7 +477,9 @@ def _seedream(task):
         raise RuntimeError("Seedream API 未返回图像")
     return (
         images,
-        f"模型平台: Seedream\n模型: {model}\n提示词: {task.prompt}\n生成数: {len(images)}",
+        f"模型平台: Seedream\n模型: {model}\n宽高比: {p['aspect_ratio']}\n"
+        f"分辨率: {p['resolution']}\n生成尺寸: {size}\n提示词: {task.prompt}\n"
+        f"生成数: {len(images)}",
     )
 
 
@@ -435,10 +518,9 @@ def _failure_status(error):
 class MultiAPIImageExecutor:
     @classmethod
     def INPUT_TYPES(cls):
-        optional = {f"task_{i}": (TASK_TYPE,) for i in range(2, 7)}
+        optional = {f"task_{i}": (TASK_TYPE,) for i in range(1, 7)}
         return {
             "required": {
-                "task_1": (TASK_TYPE,),
                 "ignore_failure": ("INT", {"default": 0, "min": 0, "max": 1000}),
                 "inputcount": ("INT", {"default": 6, "min": 1, "max": 1000}),
             },
@@ -451,13 +533,27 @@ class MultiAPIImageExecutor:
     FUNCTION = "execute"
     CATEGORY = CATEGORY
 
-    def execute(self, task_1, ignore_failure=0, inputcount=6, **kwargs):
-        tasks = [task_1]
-        tasks.extend(kwargs.get(f"task_{i}") for i in range(2, int(inputcount) + 1))
-        tasks = [task for task in tasks if task is not None]
-        for task in tasks:
+    def execute(self, ignore_failure=0, inputcount=6, task_1=None, **kwargs):
+        connected_tasks = [task_1]
+        connected_tasks.extend(kwargs.get(f"task_{i}") for i in range(2, int(inputcount) + 1))
+        connected_tasks = [task for task in connected_tasks if task is not None]
+        for task in connected_tasks:
             if not isinstance(task, ImageGenerationTask) or task.provider not in PROVIDERS:
                 raise ValueError("收到无效的图像生成任务")
+
+        tasks = [task for task in connected_tasks if task.prompt.strip()]
+        ignored_empty_prompts = len(connected_tasks) - len(tasks)
+        if not tasks:
+            logs = [
+                "MultiAPI Image Executor 任务汇总",
+                "总任务数: 0",
+                "成功任务数: 0",
+                "失败任务数: 0",
+                f"空提示词忽略数: {ignored_empty_prompts}",
+                f"ignore_failure: {ignore_failure}",
+                "没有可执行任务，未调用任何图像生成 API。",
+            ]
+            return [], "\n".join(logs), ""
 
         results = [None] * len(tasks)
         workers = min(len(tasks), 32)
@@ -482,6 +578,7 @@ class MultiAPIImageExecutor:
             f"总任务数: {len(tasks)}",
             f"成功任务数: {len(tasks) - failures}",
             f"失败任务数: {failures}",
+            f"空提示词忽略数: {ignored_empty_prompts}",
             f"ignore_failure: {ignore_failure}",
         ]
         for index, (task, result) in enumerate(zip(tasks, results), 1):
