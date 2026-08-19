@@ -201,25 +201,25 @@ class ImageGenerationTask:
     params: Dict[str, Any]
 
 
-TEST_DIRECTIVES = {
-    "[success]": "success",
-    "[failure_timeout]": "failure_timeout",
-    "[failure_safety]": "failure_safety",
-    "[failure_network]": "failure_network",
-    "[failure_other]": "failure_other",
-}
+class DirectiveFailureError(RuntimeError):
+    DIRECTIVES = {
+        "[success]": "success",
+        "[failure_timeout]": "failure_timeout",
+        "[failure_safety]": "failure_safety",
+        "[failure_network]": "failure_network",
+        "[failure_other]": "failure_other",
+    }
 
+    MESSAGES = {
+        "failure_timeout": "测试指令返回超时错误",
+        "failure_safety": "测试指令返回安全审核错误",
+        "failure_network": "测试指令返回网络错误",
+        "failure_other": "测试指令返回其他错误",
+    }
 
-class TestDirectiveFailure(RuntimeError):
     def __init__(self, status):
-        messages = {
-            "failure_timeout": "测试指令返回超时错误",
-            "failure_safety": "测试指令返回安全审核错误",
-            "failure_network": "测试指令返回网络错误",
-            "failure_other": "测试指令返回其他错误",
-        }
         self.status = status
-        super().__init__(messages[status])
+        super().__init__(self.MESSAGES[status])
 
 
 def _images(kwargs):
@@ -240,7 +240,7 @@ def _images(kwargs):
 def _task(provider, prompt, params, kwargs):
     prompt = str(prompt or "").strip()
     images = _images(kwargs)
-    if prompt and prompt.lower() not in TEST_DIRECTIVES and not images:
+    if prompt and prompt.lower() not in DirectiveFailureError.DIRECTIVES and not images:
         raise ValueError("至少需要一张宽和高均不小于 14px 的参考图")
     clean_params = {
         key: value for key, value in params.items() if not re.fullmatch(r"image\d+", key)
@@ -368,11 +368,13 @@ def _seedream_size(model, aspect_ratio, resolution):
         sizes = _SEEDREAM_PRO_2K_SIZES
     else:
         sizes = _SEEDREAM_STANDARD_SIZES.get(resolution)
+
     if not sizes or aspect_ratio not in sizes:
         raise ValueError(
             f"不支持的 Seedream 尺寸组合: model={model}, "
             f"aspect_ratio={aspect_ratio}, resolution={resolution}"
         )
+
     return sizes[aspect_ratio]
 
 
@@ -380,12 +382,15 @@ def _manual_pixel_size(value):
     value = str(value or "").strip()
     if not value:
         return None
+
     match = re.fullmatch(r"(\d+)\s*[xX×]\s*(\d+)", value)
     if not match:
         raise ValueError("手动 size 格式无效，请使用 宽x高，例如 2048x2048")
+
     width, height = (int(part) for part in match.groups())
     if width <= 0 or height <= 0:
         raise ValueError("手动 size 的宽和高必须大于 0")
+
     return f"{width}x{height}"
 
 
@@ -396,25 +401,29 @@ def _environment_key(custom_name, default_names):
         value = os.getenv(name)
         if value:
             return value.strip()
+
     if custom_name:
         raise ValueError(f"未设置指定的 Key 环境变量: {custom_name}")
     raise ValueError("未设置 Key 环境变量: " + "、".join(names))
 
 
 def _test_directive_result(task):
-    status = TEST_DIRECTIVES.get(task.prompt.strip().lower())
+    status = DirectiveFailureError.DIRECTIVES.get(task.prompt.strip().lower())
     if status is None:
         return None
+
     if status == "success":
         image = _tensor(Image.new("RGB", (512, 512), "green"))
         return [image], "测试指令: [success]\n执行状态: success（未调用图像生成 API）"
-    raise TestDirectiveFailure(status)
+
+    raise DirectiveFailureError(status)
 
 
 def _retry(task, operation):
     directive_result = _test_directive_result(task)
     if directive_result is not None:
         return directive_result
+
     attempts = 2 if task.params.get("enable_auto_retry", True) else 1
     for attempt in range(1, attempts + 1):
         try:
@@ -432,6 +441,7 @@ def _gemini(task):
         p.get("key"),
         ("MODELVERSE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
     )
+
     base = p["base_url"].rstrip("/")
     if base.endswith("/v1beta"):
         url = f"{base}/models/{p['model']}:generateContent"
@@ -439,6 +449,7 @@ def _gemini(task):
         url = f"{base}/{p['model']}:generateContent"
     else:
         url = f"{base}/v1beta/models/{p['model']}:generateContent"
+
     parts = [{"text": task.prompt}] + [
         {"inlineData": {"mimeType": "image/png", "data": _png_data_url(image).split(",", 1)[1]}}
         for image in task.images
@@ -450,15 +461,18 @@ def _gemini(task):
             "imageConfig": {"aspectRatio": p["aspect_ratio"], "imageSize": p["image_size"]},
         },
     }
+
     response = requests.post(
         url,
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         json=payload,
         timeout=p["timeout"],
     )
+
     body = response.json()
     if not response.ok or body.get("error"):
         raise RuntimeError(f"Gemini API 错误: {body.get('error') or response.text}")
+
     images, texts = [], []
     for candidate in body.get("candidates", []):
         for part in (candidate.get("content") or {}).get("parts", []):
@@ -467,8 +481,10 @@ def _gemini(task):
                 images.append(_decode_image(inline["data"]))
             elif part.get("text"):
                 texts.append(part["text"])
+
     if not images:
         raise RuntimeError("Gemini API 未返回图像")
+
     return (
         images,
         f"模型平台: Gemini\n模型: {p['model']}\n提示词: {task.prompt}\n生成数: {len(images)}"
@@ -481,13 +497,16 @@ def _gpt(task):
     key = _environment_key(p.get("key"), ("OPENAI_API_KEY",))
     files = []
     field = "image" if len(task.images) == 1 else "image[]"
+
     for index, image in enumerate(task.images, 1):
         buffer = io.BytesIO()
         _pil(image).save(buffer, format="PNG")
         files.append((field, (f"image_{index}.png", buffer.getvalue(), "image/png")))
+
     url = p["base_url"].rstrip("/")
     if not url.endswith("/images/edits"):
         url += "/images/edits"
+
     data = {
         "model": p["model"],
         "prompt": task.prompt,
@@ -504,17 +523,21 @@ def _gpt(task):
         data=data,
         timeout=p["timeout"],
     )
+
     body = response.json()
     if not response.ok or body.get("error"):
         raise RuntimeError(f"OpenAI API 错误: {body.get('error') or response.text}")
+
     images = []
     for item in body.get("data", []):
         if item.get("b64_json"):
             images.append(_decode_image(item["b64_json"]))
         elif item.get("url"):
             images.append(_download(item["url"], p["timeout"]))
+
     if not images:
         raise RuntimeError("OpenAI API 未返回图像")
+
     return (
         images,
         f"模型平台: GPT Image\n模型: {p['model']}\n提示词: {task.prompt}\n生成数: {len(images)}",
@@ -532,6 +555,7 @@ def _seedream(task):
         )
     except ImportError as error:
         raise RuntimeError("Seedream 需要安装 volcengine-python-sdk[ark]") from error
+
     client = Ark(base_url=p["base_url"], api_key=key.strip(), timeout=p["timeout"], max_retries=0)
     model = p["model"]
     manual_size = _manual_pixel_size(p.get("size"))
@@ -540,9 +564,11 @@ def _seedream(task):
     sequential = p["sequential_image_generation"]
     options = SequentialImageGenerationOptions(max_images=p["max_images"])
     extra = {}
+
     if model == "doubao-seedream-5-0-pro-260628":
         sequential, options = None, None
         extra["optimize_prompt_options"] = OptimizePromptOptions(mode=p["optimize_prompt_options"])
+
     response = client.images.generate(
         model=model,
         prompt=task.prompt,
@@ -555,14 +581,17 @@ def _seedream(task):
         stream=p["stream"],
         **extra,
     )
+
     images = []
     for item in response.data:
         if getattr(item, "url", None):
             images.append(_download(item.url, p["timeout"]))
         elif getattr(item, "b64_json", None):
             images.append(_decode_image(item.b64_json))
+
     if not images:
         raise RuntimeError("Seedream API 未返回图像")
+
     return (
         images,
         f"模型平台: Seedream\n模型: {model}\n宽高比: {p['aspect_ratio']}\n"
@@ -572,37 +601,56 @@ def _seedream(task):
     )
 
 
-PROVIDERS = {"gemini": _gemini, "seedream": _seedream, "gpt_image": _gpt}
+PROVIDERS = {
+    "gemini": _gemini,
+    "seedream": _seedream,
+    "gpt_image": _gpt,
+}
+FAILURE_SAFETY_CODES = (
+    "safety",
+    "moderation",
+    "content_policy",
+    "content filter",
+    "policy violation",
+)
+FAILURE_NETWORK_CODES = (
+    "connection",
+    "network",
+    "name resolution",
+    "proxy",
+    "ssl",
+    "502",
+    "503",
+    "bad gateway",
+    "service unavailable",
+)
+FAILURE_TIMEOUT_CODES = (
+    "timeout",
+    "timed out",
+    "504",
+)
+
+
+def _is_timeout(err, text) -> bool:
+    if not isinstance(err, (TimeoutError, requests.exceptions.Timeout)):
+        return False
+    return any(word in text for word in FAILURE_TIMEOUT_CODES)
 
 
 def _failure_status(error):
-    if isinstance(error, TestDirectiveFailure):
+    if isinstance(error, DirectiveFailureError):
         return error.status
+
     text = str(error).lower()
-    if isinstance(error, (TimeoutError, requests.exceptions.Timeout)) or any(
-        word in text for word in ("timeout", "timed out", "504")
-    ):
+    if _is_timeout(error, text):
         return "failure_timeout"
-    if any(
-        word in text
-        for word in ("safety", "moderation", "content_policy", "content filter", "policy violation")
-    ):
+
+    if any(word in text for word in FAILURE_SAFETY_CODES):
         return "failure_safety"
-    if any(
-        word in text
-        for word in (
-            "connection",
-            "network",
-            "name resolution",
-            "proxy",
-            "ssl",
-            "502",
-            "503",
-            "bad gateway",
-            "service unavailable",
-        )
-    ):
+
+    if any(word in text for word in FAILURE_NETWORK_CODES):
         return "failure_network"
+
     return "failure_other"
 
 
@@ -672,6 +720,7 @@ class MultiAPIImageExecutor:
             f"空提示词忽略数: {ignored_empty_prompts}",
             f"ignore_failure: {ignore_failure}",
         ]
+
         for index, (task, result) in enumerate(zip(tasks, results), 1):
             if result["ok"]:
                 output_images.extend(result["images"])
@@ -684,6 +733,7 @@ class MultiAPIImageExecutor:
                 if placeholders:
                     output_images.append(_tensor(Image.new("RGB", (512, 512), "red")))
                     statuses.append(result["status"])
+
         if failures and not placeholders:
             logs.append("\n失败任务数未超过 ignore_failure，失败任务已忽略且不输出占位图。")
         elif failures:
