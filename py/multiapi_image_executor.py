@@ -1,11 +1,14 @@
 import base64
 import io
+import json
 import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, Tuple
+from uuid import uuid4
 
 # import tuple
 import numpy as np
@@ -394,17 +397,251 @@ def _manual_pixel_size(value):
     return f"{width}x{height}"
 
 
+_USER_KEY_FILE_NAME = "keys.json"
+
+
+def _user_key_file_path():
+    try:
+        import folder_paths
+
+        user_directory = folder_paths.get_user_directory()
+    except (ImportError, AttributeError):
+        plugin_directory = os.path.dirname(os.path.abspath(__file__))
+        custom_nodes_directory = os.path.dirname(plugin_directory)
+        user_directory = os.path.join(os.path.dirname(custom_nodes_directory), "user")
+    return os.path.join(user_directory, _USER_KEY_FILE_NAME)
+
+
+def _load_user_keys():
+    """Read the live user key file, creating an empty one on first use."""
+    key_path = _user_key_file_path()
+    os.makedirs(os.path.dirname(key_path), exist_ok=True)
+    lock_path = key_path + ".lock"
+    last_error = None
+
+    # Retrying also tolerates editors that briefly truncate the file before saving.
+    for attempt in range(5):
+        with open(lock_path, "a+b") as lock_file:
+            _lock_file(lock_file)
+            try:
+                if not os.path.exists(key_path):
+                    file_descriptor = os.open(
+                        key_path,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                        0o600,
+                    )
+                    try:
+                        os.write(file_descriptor, b"{}\n")
+                        os.fsync(file_descriptor)
+                    finally:
+                        os.close(file_descriptor)
+
+                try:
+                    with open(key_path, encoding="utf-8-sig") as key_file:
+                        values = json.load(key_file)
+                except (OSError, json.JSONDecodeError) as error:
+                    last_error = error
+                    values = None
+            finally:
+                _unlock_file(lock_file)
+
+        if values is not None:
+            if not isinstance(values, dict):
+                raise ValueError(f"Key 文件必须是 JSON 对象: {key_path}")
+            return values
+        if attempt < 4:
+            time.sleep(0.05)
+
+    raise ValueError(f"无法解析 Key 文件 {key_path}: {last_error}") from last_error
+
+
 def _environment_key(custom_name, default_names):
     custom_name = str(custom_name or "").strip()
     names = (custom_name,) if custom_name else tuple(default_names)
+
+    user_keys = _load_user_keys()
+    for name in names:
+        value = user_keys.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
     for name in names:
         value = os.getenv(name)
         if value:
             return value.strip()
 
     if custom_name:
-        raise ValueError(f"未设置指定的 Key 环境变量: {custom_name}")
-    raise ValueError("未设置 Key 环境变量: " + "、".join(names))
+        raise ValueError(f"Key 文件和环境变量中均未设置指定名称: {custom_name}")
+    raise ValueError("Key 文件和环境变量中均未设置: " + "、".join(names))
+
+
+_PROVIDER_KEY_NAMES = {
+    "gemini": ("MODELVERSE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "seedream": ("ARK_API_KEY",),
+    "gpt_image": ("OPENAI_API_KEY",),
+}
+
+
+def _task_key_name(task):
+    """Return the configured key name, never its secret value."""
+    custom_name = str(task.params.get("key") or "").strip()
+    if custom_name:
+        return custom_name
+
+    names = _PROVIDER_KEY_NAMES.get(task.provider, ())
+    try:
+        user_keys = _load_user_keys()
+    except Exception:
+        user_keys = {}
+    for name in names:
+        value = user_keys.get(name)
+        if isinstance(value, str) and value.strip():
+            return name
+    for name in names:
+        if os.getenv(name):
+            return name
+    return names[0] if names else ""
+
+
+def _task_log_size(task):
+    p = task.params
+    if task.provider == "gemini":
+        return f"{p.get('image_size', '')} ({p.get('aspect_ratio', '')})".strip()
+    if task.provider == "gpt_image":
+        return str(_size(p.get("aspect_ratio", "")))
+    if task.provider == "seedream":
+        manual_size = str(p.get("size") or "").strip()
+        if manual_size:
+            return manual_size
+        try:
+            return _seedream_size(p.get("model"), p.get("aspect_ratio"), p.get("resolution"))
+        except Exception:
+            return f"{p.get('resolution', '')} ({p.get('aspect_ratio', '')})".strip()
+    return str(p.get("size") or "")
+
+
+def _api_log_directory():
+    try:
+        import folder_paths
+
+        output_directory = folder_paths.get_output_directory()
+    except (ImportError, AttributeError):
+        plugin_directory = os.path.dirname(os.path.abspath(__file__))
+        custom_nodes_directory = os.path.dirname(plugin_directory)
+        output_directory = os.path.join(os.path.dirname(custom_nodes_directory), "output")
+    return os.path.join(output_directory, "apilog")
+
+
+def _execution_uuid():
+    """Prefer ComfyUI's queue prompt ID so backend history can be queried."""
+    try:
+        from comfy_execution.utils import get_executing_context
+
+        context = get_executing_context()
+        prompt_id = getattr(context, "prompt_id", None)
+        if prompt_id:
+            return str(prompt_id)
+    except (ImportError, AttributeError):
+        pass
+    return str(uuid4())
+
+
+def _lock_file(lock_file):
+    if os.name == "nt":
+        import msvcrt
+
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        while True:
+            try:
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                time.sleep(0.05)
+    else:
+        import fcntl
+
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(lock_file):
+    if os.name == "nt":
+        import msvcrt
+
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _append_api_log(records, log_time):
+    """Append complete JSONL records while holding a cross-process file lock."""
+    log_directory = _api_log_directory()
+    os.makedirs(log_directory, exist_ok=True)
+    date_text = log_time.strftime("%Y-%m-%d")
+    log_path = os.path.join(log_directory, f"{date_text}.jsonl")
+    lock_path = os.path.join(log_directory, f".{date_text}.lock")
+    payload = "".join(
+        json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n" for record in records
+    ).encode("utf-8")
+
+    with open(lock_path, "a+b") as lock_file:
+        _lock_file(lock_file)
+        try:
+            file_descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+            try:
+                position = 0
+                while position < len(payload):
+                    position += os.write(file_descriptor, payload[position:])
+                os.fsync(file_descriptor)
+            finally:
+                os.close(file_descriptor)
+        finally:
+            _unlock_file(lock_file)
+
+
+def _write_task_api_log(
+    task,
+    started_at,
+    ended_at,
+    attempt_count,
+    images,
+    error=None,
+    prompt_uuid=None,
+    task_index=0,
+):
+    success = error is None
+    common = {
+        "uuid": str(prompt_uuid or uuid4()),
+        "provider": task.provider,
+        "model": str(task.params.get("model") or ""),
+        "key_name": _task_key_name(task),
+        "start_time": started_at.isoformat(timespec="milliseconds"),
+        "end_time": ended_at.isoformat(timespec="milliseconds"),
+        "retried": attempt_count > 1,
+        "attempt_count": attempt_count,
+        "size": _task_log_size(task),
+        "status": "success" if success else "failure",
+        "image_num": int(task.params.get("max_images", 1)),
+        "task_index": int(task_index),
+    }
+
+    if success:
+        records = [dict(common) for _ in images]
+    else:
+        records = [
+            dict(
+                common,
+                failure_status=_failure_status(error),
+                error=str(error),
+            )
+        ]
+    _append_api_log(records, ended_at)
 
 
 def _test_directive_result(task):
@@ -419,20 +656,161 @@ def _test_directive_result(task):
     raise DirectiveFailureError(status)
 
 
-def _retry(task, operation):
-    directive_result = _test_directive_result(task)
-    if directive_result is not None:
-        return directive_result
+def _parse_json_values(text):
+    """Parse one or more JSON values, including common SSE data lines."""
+    text = str(text or "").lstrip("\ufeff").strip()
+    if text.startswith(")]}'"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
 
-    attempts = 2 if task.params.get("enable_auto_retry", True) else 1
-    for attempt in range(1, attempts + 1):
+    sse_payloads = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("data:"):
+            continue
+        payload = stripped[5:].strip()
+        if payload and payload != "[DONE]":
+            sse_payloads.append(payload)
+    if sse_payloads:
+        text = "\n".join(sse_payloads)
+
+    decoder = json.JSONDecoder()
+    values = []
+    position = 0
+    while position < len(text):
+        while position < len(text) and text[position].isspace():
+            position += 1
+        if position >= len(text):
+            break
+        value, position = decoder.raw_decode(text, position)
+        values.append(value)
+    return values
+
+
+def _parse_response_json(response, api_name):
+    try:
+        return response.json()
+    except ValueError as original_error:
         try:
-            images, log = operation(task)
+            values = _parse_json_values(response.text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            values = []
+        if len(values) == 1:
+            return values[0]
+        if len(values) > 1:
+            return values
+
+        content_type = response.headers.get("Content-Type", "unknown")
+        preview = str(response.text or "")[:500].replace("\r", "\\r").replace("\n", "\\n")
+        raise RuntimeError(
+            f"{api_name} 返回无法解析的响应 (HTTP {response.status_code}, "
+            f"Content-Type={content_type}): {original_error}; 响应开头: {preview or '<empty>'}"
+        ) from original_error
+
+
+def _merge_gemini_response(body):
+    """Normalize standard and chunked Gemini responses to one response object."""
+    if isinstance(body, dict):
+        return body
+    if not isinstance(body, list):
+        raise RuntimeError(f"Gemini API 返回了不支持的 JSON 类型: {type(body).__name__}")
+
+    merged = {"candidates": []}
+    for chunk in body:
+        if not isinstance(chunk, dict):
+            continue
+        if chunk.get("error"):
+            return chunk
+        candidates = chunk.get("candidates")
+        if isinstance(candidates, list):
+            merged["candidates"].extend(candidates)
+        for metadata_key in ("usageMetadata", "usage_metadata", "modelVersion", "responseId"):
+            if metadata_key in chunk:
+                merged[metadata_key] = chunk[metadata_key]
+    return merged
+
+
+def _retry(task, operation, execution_uuid=None, task_index=0):
+    prompt_uuid = execution_uuid or _execution_uuid()
+    started_at = datetime.now().astimezone()
+    attempt = 0
+    attempts = 2 if task.params.get("enable_auto_retry", True) else 1
+    try:
+        directive_result = _test_directive_result(task)
+        if directive_result is not None:
+            images, log = directive_result
+            ended_at = datetime.now().astimezone()
+            _write_task_api_log(
+                task,
+                started_at,
+                ended_at,
+                attempt,
+                images,
+                prompt_uuid=prompt_uuid,
+                task_index=task_index,
+            )
+            return images, log
+
+        for attempt in range(1, attempts + 1):
+            try:
+                images, log = operation(task)
+            except Exception:
+                if attempt == attempts:
+                    raise
+                time.sleep(1.0)
+                continue
+
+            ended_at = datetime.now().astimezone()
+            _write_task_api_log(
+                task,
+                started_at,
+                ended_at,
+                attempt,
+                images,
+                prompt_uuid=prompt_uuid,
+                task_index=task_index,
+            )
             return images, log + f"\n尝试次数: {attempt}"
-        except Exception:
-            if attempt == attempts:
-                raise
-            time.sleep(1.0)
+    except Exception as error:
+        try:
+            _write_task_api_log(
+                task,
+                started_at,
+                datetime.now().astimezone(),
+                attempt,
+                (),
+                error=error,
+                prompt_uuid=prompt_uuid,
+                task_index=task_index,
+            )
+        except Exception as log_error:
+            raise RuntimeError(f"{error}; API 日志写入失败: {log_error}") from error
+        raise
+
+
+def _build_gemini_url(base_url, model):
+    """Build a Gemini generateContent URL from common base URL forms."""
+    base = str(base_url or "").strip().rstrip("/")
+    model = str(model or "").strip()
+    if not base:
+        raise ValueError("Gemini base_url 不能为空")
+    if not model:
+        raise ValueError("Gemini model 不能为空")
+
+    lower_base = base.lower()
+    if lower_base.endswith(":generatecontent"):
+        return base
+    if "/models/" in lower_base:
+        return f"{base}:generateContent"
+    if lower_base.endswith("/models"):
+        return f"{base}/{model}:generateContent"
+    if lower_base.endswith("/v1beta"):
+        return f"{base}/models/{model}:generateContent"
+
+    # Modelverse's OpenAI-compatible base is commonly saved as .../v1 in an
+    # existing workflow. Gemini uses .../v1beta instead, so avoid /v1/v1beta.
+    if lower_base.endswith("/v1"):
+        base = base[:-3]
+    return f"{base}/v1beta/models/{model}:generateContent"
 
 
 def _gemini(task):
@@ -442,13 +820,7 @@ def _gemini(task):
         ("MODELVERSE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
     )
 
-    base = p["base_url"].rstrip("/")
-    if base.endswith("/v1beta"):
-        url = f"{base}/models/{p['model']}:generateContent"
-    elif base.endswith("/models"):
-        url = f"{base}/{p['model']}:generateContent"
-    else:
-        url = f"{base}/v1beta/models/{p['model']}:generateContent"
+    url = _build_gemini_url(p["base_url"], p["model"])
 
     parts = [{"text": task.prompt}] + [
         {"inlineData": {"mimeType": "image/png", "data": _png_data_url(image).split(",", 1)[1]}}
@@ -469,9 +841,17 @@ def _gemini(task):
         timeout=p["timeout"],
     )
 
-    body = response.json()
+    if response.status_code == 404:
+        raise RuntimeError(
+            f"Gemini API 地址不存在 (HTTP 404): {url}。"
+            f"当前 base_url={p['base_url']!r}；请填写服务根地址（例如 "
+            "https://api.modelverse.cn），也可填写 /v1beta、/v1beta/models "
+            "或完整的 :generateContent 地址。"
+        )
+
+    body = _merge_gemini_response(_parse_response_json(response, f"Gemini API ({url})"))
     if not response.ok or body.get("error"):
-        raise RuntimeError(f"Gemini API 错误: {body.get('error') or response.text}")
+        raise RuntimeError(f"Gemini API 错误 ({url}): {body.get('error') or response.text}")
 
     images, texts = [], []
     for candidate in body.get("candidates", []):
@@ -696,9 +1076,16 @@ class MultiAPIImageExecutor:
 
         results = [None] * len(tasks)
         workers = min(len(tasks), 32)
+        execution_uuid = _execution_uuid()
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="api-image") as pool:
             futures = {
-                pool.submit(_retry, task, PROVIDERS[task.provider]): index
+                pool.submit(
+                    _retry,
+                    task,
+                    PROVIDERS[task.provider],
+                    execution_uuid,
+                    index,
+                ): index
                 for index, task in enumerate(tasks)
             }
             for future in as_completed(futures):
