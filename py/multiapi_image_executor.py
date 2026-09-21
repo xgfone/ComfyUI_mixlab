@@ -16,6 +16,8 @@ import requests
 import torch
 from PIL import Image
 
+from .util.key_resolver import get_key, get_key_name
+
 TASK_TYPE = "MULTIAPI_IMAGE_TASK"
 CATEGORY = "MultiAPI Image Executor"
 
@@ -190,6 +192,81 @@ class GPTImageGenTask:
 
     def submit(self, prompt, image1, **kwargs):
         return _task("gpt_image", prompt, kwargs, {"image1": image1, **kwargs})
+
+
+class QwenImageGenTask:
+    """Create a Qwen image-editing task for the MultiAPI executor."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
+                "image1": ("IMAGE",),
+                "model": (
+                    [
+                        "qwen-image-3.0-pro",
+                        "qwen-image-3.0",
+                        "qwen-image-2.0-pro",
+                        "qwen-image-2.0",
+                        "qwen-image-edit-max",
+                        "qwen-image-edit-plus",
+                        "qwen-image-edit",
+                    ],
+                    {"default": "qwen-image-3.0-pro"},
+                ),
+                "size": (
+                    [
+                        "auto",
+                        "1024*1024",
+                        "768*1152",
+                        "1024*1536",
+                        "1152*768",
+                        "1536*1024",
+                        "720*1280",
+                        "1080*1920",
+                        "1280*720",
+                        "1920*1080",
+                    ],
+                    {"default": "1024*1024"},
+                ),
+                "max_images": ("INT", {"default": 1, "min": 1, "max": 6}),
+                "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
+                "prompt_extend": ("BOOLEAN", {"default": True}),
+                "watermark": ("BOOLEAN", {"default": False}),
+                "enable_thinking": ("BOOLEAN", {"default": True}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+                "base_url": (
+                    "STRING",
+                    {
+                        "default": (
+                            "https://dashscope.aliyuncs.com/api/v1/services/aigc/"
+                            "multimodal-generation/generation"
+                        ),
+                    },
+                ),
+                "timeout": ("INT", {"default": 120, "min": 10, "max": 300}),
+            },
+            "optional": {
+                "key": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "placeholder": "DASHSCOPE_API_KEY",
+                    },
+                ),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+            },
+        }
+
+    RETURN_TYPES = (TASK_TYPE,)
+    RETURN_NAMES = ("task",)
+    FUNCTION = "submit"
+    CATEGORY = CATEGORY
+
+    def submit(self, prompt, image1, **kwargs):
+        return _task("qwen", prompt, kwargs, {"image1": image1, **kwargs})
 
 
 ## GenTask End
@@ -458,6 +535,7 @@ def _load_user_keys():
 def _environment_key(custom_name, default_names):
     custom_name = str(custom_name or "").strip()
     names = (custom_name,) if custom_name else tuple(default_names)
+    return get_key(*names)
 
     user_keys = _load_user_keys()
     for name in names:
@@ -479,6 +557,7 @@ _PROVIDER_KEY_NAMES = {
     "gemini": ("MODELVERSE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "seedream": ("ARK_API_KEY",),
     "gpt_image": ("OPENAI_API_KEY",),
+    "qwen": ("DASHSCOPE_API_KEY",),
 }
 
 
@@ -489,6 +568,8 @@ def _task_key_name(task):
         return custom_name
 
     names = _PROVIDER_KEY_NAMES.get(task.provider, ())
+    return get_key_name(*names) or (names[0] if names else "")
+
     try:
         user_keys = _load_user_keys()
     except Exception:
@@ -517,6 +598,8 @@ def _task_log_size(task):
             return _seedream_size(p.get("model"), p.get("aspect_ratio"), p.get("resolution"))
         except Exception:
             return f"{p.get('resolution', '')} ({p.get('aspect_ratio', '')})".strip()
+    if task.provider == "qwen":
+        return str(p.get("size") or "auto")
     return str(p.get("size") or "")
 
 
@@ -981,10 +1064,76 @@ def _seedream(task):
     )
 
 
+def _qwen(task):
+    """Call DashScope's Qwen image-editing endpoint with 1–3 local images."""
+    p = task.params
+    if not 1 <= len(task.images) <= 3:
+        raise ValueError("Qwen image editing requires one to three input images.")
+
+    key = _environment_key(p.get("key"), ("DASHSCOPE_API_KEY",))
+    content = [{"image": _png_data_url(image)} for image in task.images]
+    content.append({"text": task.prompt})
+    model = str(p["model"])
+    if model == "qwen-image-edit" and p["max_images"] != 1:
+        raise ValueError("qwen-image-edit supports only one output image.")
+
+    parameters = {
+        "n": p["max_images"],
+        "negative_prompt": p["negative_prompt"],
+        "watermark": p["watermark"],
+        "seed": p["seed"],
+    }
+    if model != "qwen-image-edit":
+        parameters["prompt_extend"] = p["prompt_extend"]
+    if model != "qwen-image-edit" and p["size"] != "auto":
+        parameters["size"] = p["size"]
+    if model.startswith("qwen-image-3.0"):
+        parameters["enable_thinking"] = p["enable_thinking"]
+
+    payload = {
+        "model": p["model"],
+        "input": {"messages": [{"role": "user", "content": content}]},
+        "parameters": parameters,
+    }
+    url = str(p["base_url"] or "").strip()
+    if not url:
+        raise ValueError("Qwen base_url cannot be empty.")
+    response = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=p["timeout"],
+    )
+    body = _parse_response_json(response, f"Qwen API ({url})")
+    if not isinstance(body, dict):
+        raise RuntimeError(f"Qwen API returned an unsupported JSON type: {type(body).__name__}")
+    if not response.ok or body.get("error") or body.get("code"):
+        detail = body.get("error") or body.get("message") or body.get("code") or response.text
+        raise RuntimeError(f"Qwen API error: {detail}")
+
+    images = []
+    for choice in (body.get("output") or {}).get("choices") or []:
+        message = choice.get("message") or {}
+        for item in message.get("content") or []:
+            image_url = item.get("image") if isinstance(item, dict) else None
+            if image_url:
+                images.append(_download(image_url, p["timeout"]))
+
+    if not images:
+        raise RuntimeError("Qwen API returned no images.")
+
+    return (
+        images,
+        f"Model platform: Qwen\nModel: {p['model']}\nInput images: {len(task.images)}\n"
+        f"Size: {p['size']}\nPrompt: {task.prompt}\nGenerated: {len(images)}",
+    )
+
+
 PROVIDERS = {
     "gemini": _gemini,
     "seedream": _seedream,
     "gpt_image": _gpt,
+    "qwen": _qwen,
 }
 FAILURE_SAFETY_CODES = (
     "safety",
@@ -1132,10 +1281,12 @@ NODE_CLASS_MAPPINGS = {
     "MAIE_GeminiTask": GeminiImageGenTask,
     "MAIE_SeedreamTask": SeedreamImageGenTask,
     "MAIE_GPTImageTask": GPTImageGenTask,
+    "MAIE_QwenTask": QwenImageGenTask,
     "MAIE_ExecuteTasks": MultiAPIImageExecutor,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "MAIE_QwenTask": "Qwen Image Task · MultiAPI Image Executor",
     "MAIE_GeminiTask": "Gemini Task · MultiAPI Image Executor",
     "MAIE_SeedreamTask": "Seedream Task · MultiAPI Image Executor",
     "MAIE_GPTImageTask": "GPT Image Task · MultiAPI Image Executor",
