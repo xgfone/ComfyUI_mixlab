@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Tuple
+from urllib.parse import urlparse
 from uuid import uuid4
 
 # import tuple
@@ -195,38 +196,36 @@ class GPTImageGenTask:
 
 
 class QwenImageGenTask:
-    """Create a Qwen image-editing task for the MultiAPI executor."""
+    """Create a UCloud Qwen image-generation task for the MultiAPI executor."""
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "image1": ("IMAGE",),
                 "model": (
                     [
                         "qwen-image-3.0-pro",
                         "qwen-image-3.0",
-                        "qwen-image-2.0-pro",
-                        "qwen-image-2.0",
-                        "qwen-image-edit-max",
-                        "qwen-image-edit-plus",
-                        "qwen-image-edit",
                     ],
                     {"default": "qwen-image-3.0-pro"},
+                ),
+                "protocol": (
+                    ["auto", "ucloud", "alibaba_openai"],
+                    {"default": "auto"},
                 ),
                 "size": (
                     [
                         "auto",
-                        "1024*1024",
-                        "768*1152",
-                        "1024*1536",
-                        "1152*768",
-                        "1536*1024",
-                        "720*1280",
-                        "1080*1920",
-                        "1280*720",
-                        "1920*1080",
+                        "1024x1024",
+                        "768x1152",
+                        "1024x1536",
+                        "1152x768",
+                        "1536x1024",
+                        "720x1280",
+                        "1080x1920",
+                        "1280x720",
+                        "1920x1080",
                     ],
                     {"default": "1024*1024"},
                 ),
@@ -239,24 +238,22 @@ class QwenImageGenTask:
                 "base_url": (
                     "STRING",
                     {
-                        "default": (
-                            "https://dashscope.aliyuncs.com/api/v1/services/aigc/"
-                            "multimodal-generation/generation"
-                        ),
+                        "default": ("https://api.modelverse.cn/v1"),
                     },
                 ),
-                "timeout": ("INT", {"default": 120, "min": 10, "max": 300}),
+                "timeout": ("INT", {"default": 600, "min": 10, "max": 900}),
             },
             "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
                 "key": (
                     "STRING",
                     {
                         "default": "",
-                        "placeholder": "DASHSCOPE_API_KEY",
+                        "placeholder": "MODELVERSE_API_KEY",
                     },
                 ),
-                "image2": ("IMAGE",),
-                "image3": ("IMAGE",),
             },
         }
 
@@ -265,7 +262,7 @@ class QwenImageGenTask:
     FUNCTION = "submit"
     CATEGORY = CATEGORY
 
-    def submit(self, prompt, image1, **kwargs):
+    def submit(self, prompt, image1=None, **kwargs):
         return _task("qwen", prompt, kwargs, {"image1": image1, **kwargs})
 
 
@@ -320,7 +317,12 @@ def _images(kwargs):
 def _task(provider, prompt, params, kwargs):
     prompt = str(prompt or "").strip()
     images = _images(kwargs)
-    if prompt and prompt.lower() not in DirectiveFailureError.DIRECTIVES and not images:
+    if (
+        provider != "qwen"
+        and prompt
+        and prompt.lower() not in DirectiveFailureError.DIRECTIVES
+        and not images
+    ):
         raise ValueError("至少需要一张宽和高均不小于 14px 的参考图")
     clean_params = {
         key: value for key, value in params.items() if not re.fullmatch(r"image\d+", key)
@@ -557,8 +559,48 @@ _PROVIDER_KEY_NAMES = {
     "gemini": ("MODELVERSE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "seedream": ("ARK_API_KEY",),
     "gpt_image": ("OPENAI_API_KEY",),
-    "qwen": ("DASHSCOPE_API_KEY",),
+    "qwen": ("MODELVERSE_API_KEY", "DASHSCOPE_API_KEY"),
 }
+
+
+def _qwen_protocol(base_url, configured_protocol="auto"):
+    """Resolve the Qwen request schema from an explicit choice or known host."""
+    configured_protocol = str(configured_protocol or "auto").strip().lower()
+    if configured_protocol in {"ucloud", "alibaba_openai"}:
+        return configured_protocol
+    if configured_protocol != "auto":
+        raise ValueError(f"Unsupported Qwen protocol: {configured_protocol}")
+
+    url = str(base_url or "").strip()
+    parsed = urlparse(url if "://" in url else f"//{url}")
+    host = (parsed.hostname or "").lower()
+    if host == "modelverse.cn" or host.endswith(".modelverse.cn"):
+        return "ucloud"
+    if host == "dashscope.aliyuncs.com" or host.endswith(".maas.aliyuncs.com"):
+        return "alibaba_openai"
+    raise ValueError(
+        "Unable to identify the Qwen protocol from base_url. "
+        "Choose ucloud or alibaba_openai explicitly."
+    )
+
+
+def _qwen_key_names(protocol):
+    if protocol == "ucloud":
+        return ("MODELVERSE_API_KEY", "DASHSCOPE_API_KEY")
+    return ("DASHSCOPE_API_KEY", "MODELVERSE_API_KEY")
+
+
+def _qwen_size(value):
+    """Normalize legacy ``width*height`` values to OpenAI's ``widthxheight``."""
+    value = str(value or "auto").strip().lower()
+    if value == "auto":
+        return "auto"
+    match = re.fullmatch(r"(\d+)\s*[x*]\s*(\d+)", value)
+    if not match or int(match.group(1)) <= 0 or int(match.group(2)) <= 0:
+        raise ValueError(
+            "Qwen size must be auto or use positive widthxheight, for example 1024x1024."
+        )
+    return f"{int(match.group(1))}x{int(match.group(2))}"
 
 
 def _task_key_name(task):
@@ -568,6 +610,13 @@ def _task_key_name(task):
         return custom_name
 
     names = _PROVIDER_KEY_NAMES.get(task.provider, ())
+    if task.provider == "qwen":
+        try:
+            names = _qwen_key_names(
+                _qwen_protocol(task.params.get("base_url"), task.params.get("protocol"))
+            )
+        except ValueError:
+            pass
     return get_key_name(*names) or (names[0] if names else "")
 
     try:
@@ -599,7 +648,10 @@ def _task_log_size(task):
         except Exception:
             return f"{p.get('resolution', '')} ({p.get('aspect_ratio', '')})".strip()
     if task.provider == "qwen":
-        return str(p.get("size") or "auto")
+        try:
+            return _qwen_size(p.get("size"))
+        except ValueError:
+            return str(p.get("size") or "auto")
     return str(p.get("size") or "")
 
 
@@ -1065,39 +1117,40 @@ def _seedream(task):
 
 
 def _qwen(task):
-    """Call DashScope's Qwen image-editing endpoint with 1–3 local images."""
+    """Call Qwen through the OpenAI Images-compatible protocol."""
     p = task.params
-    if not 1 <= len(task.images) <= 3:
-        raise ValueError("Qwen image editing requires one to three input images.")
+    if len(task.images) > 3:
+        raise ValueError("Qwen supports at most three reference images.")
 
-    key = _environment_key(p.get("key"), ("DASHSCOPE_API_KEY",))
-    content = [{"image": _png_data_url(image)} for image in task.images]
-    content.append({"text": task.prompt})
-    model = str(p["model"])
-    if model == "qwen-image-edit" and p["max_images"] != 1:
-        raise ValueError("qwen-image-edit supports only one output image.")
-
-    parameters = {
-        "n": p["max_images"],
-        "negative_prompt": p["negative_prompt"],
-        "watermark": p["watermark"],
-        "seed": p["seed"],
-    }
-    if model != "qwen-image-edit":
-        parameters["prompt_extend"] = p["prompt_extend"]
-    if model != "qwen-image-edit" and p["size"] != "auto":
-        parameters["size"] = p["size"]
-    if model.startswith("qwen-image-3.0"):
-        parameters["enable_thinking"] = p["enable_thinking"]
-
-    payload = {
-        "model": p["model"],
-        "input": {"messages": [{"role": "user", "content": content}]},
-        "parameters": parameters,
-    }
-    url = str(p["base_url"] or "").strip()
+    url = str(p["base_url"] or "").strip().rstrip("/")
     if not url:
         raise ValueError("Qwen base_url cannot be empty.")
+    protocol = _qwen_protocol(url, p.get("protocol"))
+    key = _environment_key(p.get("key"), _qwen_key_names(protocol))
+    size = _qwen_size(p.get("size"))
+    image_data = [_png_data_url(image) for image in task.images]
+    payload = {
+        "model": p["model"],
+        "prompt": task.prompt,
+        "n": p["max_images"],
+        "negative_prompt": p["negative_prompt"],
+        "prompt_extend": p["prompt_extend"],
+        "watermark": p["watermark"],
+        "enable_thinking": p["enable_thinking"],
+        "seed": p["seed"],
+    }
+    if image_data:
+        # UCloud names the array ``images``. Alibaba's OpenAI-compatible
+        # endpoint uses singular ``image`` but accepts a string array.
+        payload["images" if protocol == "ucloud" else "image"] = image_data
+    if size != "auto":
+        payload["size"] = size
+
+    if url.endswith("/v1"):
+        url += "/images/generations"
+    elif not url.endswith("/images/generations"):
+        url += "/v1/images/generations"
+
     response = requests.post(
         url,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -1112,12 +1165,13 @@ def _qwen(task):
         raise RuntimeError(f"Qwen API error: {detail}")
 
     images = []
-    for choice in (body.get("output") or {}).get("choices") or []:
-        message = choice.get("message") or {}
-        for item in message.get("content") or []:
-            image_url = item.get("image") if isinstance(item, dict) else None
-            if image_url:
-                images.append(_download(image_url, p["timeout"]))
+    for item in body.get("data") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("b64_json"):
+            images.append(_decode_image(item["b64_json"]))
+        elif item.get("url"):
+            images.append(_download(item["url"], p["timeout"]))
 
     if not images:
         raise RuntimeError("Qwen API returned no images.")
@@ -1125,7 +1179,7 @@ def _qwen(task):
     return (
         images,
         f"Model platform: Qwen\nModel: {p['model']}\nInput images: {len(task.images)}\n"
-        f"Size: {p['size']}\nPrompt: {task.prompt}\nGenerated: {len(images)}",
+        f"Size: {size}\nPrompt: {task.prompt}\nGenerated: {len(images)}",
     )
 
 
