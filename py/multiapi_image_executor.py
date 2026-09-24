@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -21,6 +22,38 @@ from .util.key_resolver import get_key, get_key_name
 
 TASK_TYPE = "MULTIAPI_IMAGE_TASK"
 CATEGORY = "MultiAPI Image Executor"
+# Reference-image limits are enforced again on the server because a workflow
+# JSON can be edited outside of the browser UI.
+_REFERENCE_IMAGE_LIMITS = {
+    "gemini": 6,
+    "seedream": 10,
+    "gpt_image": 16,
+    "qwen": 3,
+}
+# Keep the defaults at the number of ports offered by earlier releases so an
+# existing workflow retains all of its image links when it is first reopened.
+_LEGACY_IMAGE_INPUT_COUNTS = {
+    "gemini": 6,
+    "seedream": 6,
+    "gpt_image": 6,
+    "qwen": 3,
+}
+# All current providers support text-to-image when no reference image is given.
+_IMAGE_REQUIRED_PROVIDERS = ()
+
+# Qwen requests are globally coordinated across concurrent workflow tasks.
+# These values intentionally keep retries short for interactive production use.
+_QWEN_REQUEST_INTERVAL_SECONDS = 1.0
+_QWEN_RATE_LIMIT_RETRIES = 5
+_QWEN_MAX_RETRY_DELAY_SECONDS = 5.0
+_QWEN_RATE_LIMIT_LOCK = threading.Lock()
+_QWEN_NEXT_REQUEST_AT = 0.0
+
+
+class QwenRateLimitError(RuntimeError):
+    def __init__(self, message, retry_after=None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 #############################################################################
@@ -33,7 +66,6 @@ class GeminiImageGenTask:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "image1": ("IMAGE",),
                 "model": (["gemini-2.5-flash-image"],),
                 "aspect_ratio": (
                     [
@@ -66,6 +98,15 @@ class GeminiImageGenTask:
                 "timeout": ("INT", {"default": 70, "min": 10, "max": 300}),
             },
             "optional": {
+                "image1": ("IMAGE",),
+                "imagecount": (
+                    "INT",
+                    {
+                        "default": _LEGACY_IMAGE_INPUT_COUNTS["gemini"],
+                        "min": 0,
+                        "max": _REFERENCE_IMAGE_LIMITS["gemini"],
+                    },
+                ),
                 "key": (
                     "STRING",
                     {
@@ -82,7 +123,7 @@ class GeminiImageGenTask:
     FUNCTION = "submit"
     CATEGORY = CATEGORY
 
-    def submit(self, prompt, image1, **kwargs):
+    def submit(self, prompt, image1=None, **kwargs):
         return _task("gemini", prompt, kwargs, {"image1": image1, **kwargs})
 
 
@@ -92,7 +133,6 @@ class SeedreamImageGenTask:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "image1": ("IMAGE",),
                 "model": (
                     [
                         "doubao-seedream-4-0-250828",
@@ -127,6 +167,7 @@ class SeedreamImageGenTask:
                 "optimize_prompt_options": (["fast", "standard"],),
             },
             "optional": {
+                "image1": ("IMAGE",),
                 "key": (
                     "STRING",
                     {
@@ -142,6 +183,14 @@ class SeedreamImageGenTask:
                     },
                 ),
                 **_optional_images(),
+                "imagecount": (
+                    "INT",
+                    {
+                        "default": _LEGACY_IMAGE_INPUT_COUNTS["seedream"],
+                        "min": 0,
+                        "max": _REFERENCE_IMAGE_LIMITS["seedream"],
+                    },
+                ),
             },
         }
 
@@ -150,7 +199,7 @@ class SeedreamImageGenTask:
     FUNCTION = "submit"
     CATEGORY = CATEGORY
 
-    def submit(self, prompt, image1, **kwargs):
+    def submit(self, prompt, image1=None, **kwargs):
         return _task("seedream", prompt, kwargs, {"image1": image1, **kwargs})
 
 
@@ -160,8 +209,7 @@ class GPTImageGenTask:
         return {
             "required": {
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "image1": ("IMAGE",),
-                "model": (["gpt-image-2"],),
+                "model": (["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"],),
                 "aspect_ratio": (
                     ["auto", "1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16", "21:9", "2K", "4K"],
                 ),
@@ -175,6 +223,7 @@ class GPTImageGenTask:
                 "timeout": ("INT", {"default": 70, "min": 10, "max": 300}),
             },
             "optional": {
+                "image1": ("IMAGE",),
                 "key": (
                     "STRING",
                     {
@@ -183,6 +232,14 @@ class GPTImageGenTask:
                     },
                 ),
                 **_optional_images(),
+                "imagecount": (
+                    "INT",
+                    {
+                        "default": _LEGACY_IMAGE_INPUT_COUNTS["gpt_image"],
+                        "min": 0,
+                        "max": _REFERENCE_IMAGE_LIMITS["gpt_image"],
+                    },
+                ),
             },
         }
 
@@ -191,7 +248,7 @@ class GPTImageGenTask:
     FUNCTION = "submit"
     CATEGORY = CATEGORY
 
-    def submit(self, prompt, image1, **kwargs):
+    def submit(self, prompt, image1=None, **kwargs):
         return _task("gpt_image", prompt, kwargs, {"image1": image1, **kwargs})
 
 
@@ -227,7 +284,7 @@ class QwenImageGenTask:
                         "1280x720",
                         "1920x1080",
                     ],
-                    {"default": "1024*1024"},
+                    {"default": "1024x1024"},
                 ),
                 "max_images": ("INT", {"default": 1, "min": 1, "max": 6}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -252,6 +309,14 @@ class QwenImageGenTask:
                     {
                         "default": "",
                         "placeholder": "MODELVERSE_API_KEY",
+                    },
+                ),
+                "imagecount": (
+                    "INT",
+                    {
+                        "default": _LEGACY_IMAGE_INPUT_COUNTS["qwen"],
+                        "min": 0,
+                        "max": _REFERENCE_IMAGE_LIMITS["qwen"],
                     },
                 ),
             },
@@ -301,8 +366,13 @@ class DirectiveFailureError(RuntimeError):
 
 def _images(kwargs):
     result = []
-    for index in range(1, 7):
-        image = kwargs.get(f"image{index}")
+    image_items = []
+    for name, image in kwargs.items():
+        match = re.fullmatch(r"image(\d+)", name)
+        if match:
+            image_items.append((int(match.group(1)), image))
+
+    for _, image in sorted(image_items):
         if image is None:
             continue
         shape = getattr(image, "shape", ())
@@ -317,15 +387,20 @@ def _images(kwargs):
 def _task(provider, prompt, params, kwargs):
     prompt = str(prompt or "").strip()
     images = _images(kwargs)
+    image_limit = _REFERENCE_IMAGE_LIMITS[provider]
+    if len(images) > image_limit:
+        raise ValueError(f"{provider} supports at most {image_limit} reference images.")
     if (
-        provider != "qwen"
+        provider in _IMAGE_REQUIRED_PROVIDERS
         and prompt
         and prompt.lower() not in DirectiveFailureError.DIRECTIVES
         and not images
     ):
         raise ValueError("至少需要一张宽和高均不小于 14px 的参考图")
     clean_params = {
-        key: value for key, value in params.items() if not re.fullmatch(r"image\d+", key)
+        key: value
+        for key, value in params.items()
+        if not re.fullmatch(r"image\d+", key) and key != "imagecount"
     }
     return (ImageGenerationTask(provider, prompt, images, clean_params),)
 
@@ -864,11 +939,64 @@ def _merge_gemini_response(body):
     return merged
 
 
+def _qwen_wait_for_request_slot():
+    """Serialize Qwen starts and keep a small interval between requests."""
+    global _QWEN_NEXT_REQUEST_AT
+    with _QWEN_RATE_LIMIT_LOCK:
+        wait_seconds = _QWEN_NEXT_REQUEST_AT - time.monotonic()
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
+        _QWEN_NEXT_REQUEST_AT = time.monotonic() + _QWEN_REQUEST_INTERVAL_SECONDS
+
+
+def _qwen_defer_requests(delay_seconds):
+    global _QWEN_NEXT_REQUEST_AT
+    with _QWEN_RATE_LIMIT_LOCK:
+        _QWEN_NEXT_REQUEST_AT = max(
+            _QWEN_NEXT_REQUEST_AT,
+            time.monotonic() + delay_seconds,
+        )
+
+
+def _qwen_is_rate_limited(error):
+    if isinstance(error, QwenRateLimitError):
+        return True
+    text = str(error).lower()
+    return "429" in text or "rate limit" in text or "too many requests" in text
+
+
+def _qwen_retry_delay(error, retry_number):
+    retry_after = getattr(error, "retry_after", None)
+    if retry_after is not None:
+        try:
+            retry_after = float(retry_after)
+        except (TypeError, ValueError):
+            retry_after = None
+        if retry_after is not None:
+            if 0 <= retry_after <= _QWEN_MAX_RETRY_DELAY_SECONDS:
+                return retry_after
+            return None
+
+    # Retry only short-lived throttling: 1 second, then 2 seconds by default.
+    return min(float(2 ** (retry_number - 1)), _QWEN_MAX_RETRY_DELAY_SECONDS)
+
+
+def _run_qwen_with_policy(task, operation):
+    _qwen_wait_for_request_slot()
+    return operation(task)
+
+
 def _retry(task, operation, execution_uuid=None, task_index=0):
     prompt_uuid = execution_uuid or _execution_uuid()
     started_at = datetime.now().astimezone()
     attempt = 0
-    attempts = 2 if task.params.get("enable_auto_retry", True) else 1
+    is_qwen = task.provider == "qwen"
+    if is_qwen:
+        attempts = 1 + (
+            _QWEN_RATE_LIMIT_RETRIES if task.params.get("enable_auto_retry", True) else 0
+        )
+    else:
+        attempts = 2 if task.params.get("enable_auto_retry", True) else 1
     try:
         directive_result = _test_directive_result(task)
         if directive_result is not None:
@@ -887,10 +1015,21 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
 
         for attempt in range(1, attempts + 1):
             try:
-                images, log = operation(task)
-            except Exception:
+                if is_qwen:
+                    images, log = _run_qwen_with_policy(task, operation)
+                else:
+                    images, log = operation(task)
+            except Exception as error:
                 if attempt == attempts:
                     raise
+                if is_qwen:
+                    if not _qwen_is_rate_limited(error):
+                        raise
+                    delay_seconds = _qwen_retry_delay(error, attempt)
+                    if delay_seconds is None:
+                        raise
+                    _qwen_defer_requests(delay_seconds)
+                    continue
                 time.sleep(1.0)
                 continue
 
@@ -1010,34 +1149,42 @@ def _gemini(task):
 def _gpt(task):
     p = task.params
     key = _environment_key(p.get("key"), ("OPENAI_API_KEY",))
-    files = []
-    field = "image" if len(task.images) == 1 else "image[]"
-
-    for index, image in enumerate(task.images, 1):
-        buffer = io.BytesIO()
-        _pil(image).save(buffer, format="PNG")
-        files.append((field, (f"image_{index}.png", buffer.getvalue(), "image/png")))
-
     url = p["base_url"].rstrip("/")
-    if not url.endswith("/images/edits"):
-        url += "/images/edits"
+    if url.endswith("/images/edits") or url.endswith("/images/generations"):
+        url = url.rsplit("/images/", 1)[0]
 
     data = {
         "model": p["model"],
         "prompt": task.prompt,
         "size": _size(p["aspect_ratio"]),
-        "n": str(p["max_images"]),
+        "n": p["max_images"],
         "quality": p["quality"],
         "output_format": p["output_format"],
-        "output_compression": str(p["output_compression"]),
+        "output_compression": p["output_compression"],
     }
-    response = requests.post(
-        url,
-        headers={"Authorization": f"Bearer {key}"},
-        files=files,
-        data=data,
-        timeout=p["timeout"],
-    )
+    if task.images:
+        url += "/images/edits"
+        field = "image" if len(task.images) == 1 else "image[]"
+        files = []
+        for index, image in enumerate(task.images, 1):
+            buffer = io.BytesIO()
+            _pil(image).save(buffer, format="PNG")
+            files.append((field, (f"image_{index}.png", buffer.getvalue(), "image/png")))
+        response = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}"},
+            files=files,
+            data={key: str(value) for key, value in data.items()},
+            timeout=p["timeout"],
+        )
+    else:
+        url += "/images/generations"
+        response = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=data,
+            timeout=p["timeout"],
+        )
 
     body = response.json()
     if not response.ok or body.get("error"):
@@ -1084,18 +1231,21 @@ def _seedream(task):
         sequential, options = None, None
         extra["optimize_prompt_options"] = OptimizePromptOptions(mode=p["optimize_prompt_options"])
 
-    response = client.images.generate(
-        model=model,
-        prompt=task.prompt,
-        image=[_png_data_url(image) for image in task.images],
-        size=size,
-        sequential_image_generation=sequential,
-        sequential_image_generation_options=options,
-        response_format=p["response_format"],
-        watermark=p["watermark"],
-        stream=p["stream"],
+    request_args = {
+        "model": model,
+        "prompt": task.prompt,
+        "size": size,
+        "sequential_image_generation": sequential,
+        "sequential_image_generation_options": options,
+        "response_format": p["response_format"],
+        "watermark": p["watermark"],
+        "stream": p["stream"],
         **extra,
-    )
+    }
+    if task.images:
+        request_args["image"] = [_png_data_url(image) for image in task.images]
+
+    response = client.images.generate(**request_args)
 
     images = []
     for item in response.data:
@@ -1119,8 +1269,9 @@ def _seedream(task):
 def _qwen(task):
     """Call Qwen through the OpenAI Images-compatible protocol."""
     p = task.params
-    if len(task.images) > 3:
-        raise ValueError("Qwen supports at most three reference images.")
+    image_limit = _REFERENCE_IMAGE_LIMITS["qwen"]
+    if len(task.images) > image_limit:
+        raise ValueError(f"Qwen supports at most {image_limit} reference images.")
 
     url = str(p["base_url"] or "").strip().rstrip("/")
     if not url:
@@ -1157,6 +1308,11 @@ def _qwen(task):
         json=payload,
         timeout=p["timeout"],
     )
+    if response.status_code == 429:
+        raise QwenRateLimitError(
+            f"Qwen API rate limit: {response.text or 'HTTP 429'}",
+            response.headers.get("Retry-After"),
+        )
     body = _parse_response_json(response, f"Qwen API ({url})")
     if not isinstance(body, dict):
         raise RuntimeError(f"Qwen API returned an unsupported JSON type: {type(body).__name__}")
