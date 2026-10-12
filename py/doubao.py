@@ -51,7 +51,7 @@ from PIL import Image
 
 try:
     # Official Ark Runtime SDK import (as per docs)
-    from volcenginesdkarkruntime import Ark  # type: ignore
+    from arkruntime import Ark  # type: ignore
 except Exception as _e:
     Ark = None  # will check later
 

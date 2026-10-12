@@ -6,12 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import requests
 import torch
-from PIL import Image
-from volcenginesdkarkruntime import Ark
-from volcenginesdkarkruntime.types.images.images import (
+from arkruntime import Ark
+from arkruntime.types.images.images import (
     OptimizePromptOptions,
     SequentialImageGenerationOptions,
 )
+from PIL import Image
 
 
 class SeedreamImageGenerateExecutor:

@@ -6,9 +6,9 @@ import time
 import aiohttp
 import numpy as np
 import torch
+from arkruntime import Ark
+from arkruntime.types.images.images import SequentialImageGenerationOptions
 from PIL import Image
-from volcenginesdkarkruntime import Ark
-from volcenginesdkarkruntime.types.images.images import SequentialImageGenerationOptions
 
 
 class SeedreamImageGenerateConcurrent:
