@@ -1,5 +1,4 @@
 import io
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -7,11 +6,9 @@ import numpy as np
 import requests
 import torch
 from arkruntime import Ark
-from arkruntime.types.images import (
-    OptimizePromptOptions,
-    SequentialImageGenerationOptions,
-)
 from PIL import Image
+
+from .util.key_resolver import get_key
 
 
 class SeedreamImageGenerateExecutor:
@@ -179,7 +176,7 @@ class SeedreamImageGenerateExecutor:
                 "task6_image4": ("IMAGE",),
                 "task6_image5": ("IMAGE",),
                 "task6_image_add": ("IMAGE",),
-                "optimize_prompt_options": ("STRING", ["standard", "fast"], {"default": "fast"}),
+                "optimize_prompt_options": (["standard", "fast"], {"default": "fast"}),
             },
         }
 
@@ -361,7 +358,7 @@ class SeedreamImageGenerateExecutor:
 
     def initialize_client(self, base_url, timeout):
         """Initialize the Ark client"""
-        api_key = os.environ.get("ARK_API_KEY")
+        api_key = get_key("ARK_API_KEY")
 
         if not api_key:
             raise ValueError("API Key is required. Please set ARK_API_KEY environment variable.")
@@ -829,13 +826,13 @@ class SeedreamImageGenerateExecutor:
             size = self.aspect_ratio_to_size(aspect_ratio)
 
             # Prepare generation options
-            generation_options = SequentialImageGenerationOptions(max_images=max_images)
-            optimize_prompt_options = None
+            generation_options = {"max_images": max_images}
+            prompt_optimization = None
 
             if model == "doubao-seedream-5-0-pro-260628":
                 sequential_image_generation = None
                 generation_options = None
-                optimize_prompt_options = OptimizePromptOptions(mode=optimize_prompt_options)
+                prompt_optimization = {"mode": optimize_prompt_options or "fast"}
 
             # Generate images
             images_response = self.client.images.generate(
@@ -848,7 +845,7 @@ class SeedreamImageGenerateExecutor:
                 response_format=response_format,
                 watermark=watermark,
                 stream=stream,
-                optimize_prompt_options=optimize_prompt_options,
+                optimize_prompt_options=prompt_optimization,
             )
 
             # Process generated images and collect information

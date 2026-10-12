@@ -1220,10 +1220,6 @@ def _seedream(task):
     key = _environment_key(p.get("key"), ("ARK_API_KEY",))
     try:
         from arkruntime import Ark
-        from arkruntime.types.images import (
-            OptimizePromptOptions,
-            SequentialImageGenerationOptions,
-        )
     except ImportError as error:
         raise RuntimeError("Seedream 需要安装 volcengine-python-sdk[ark]") from error
 
@@ -1233,16 +1229,8 @@ def _seedream(task):
     size = manual_size or _seedream_size(model, p["aspect_ratio"], p["resolution"])
     size_source = "手动输入" if manual_size else "分辨率与宽高比预设"
     sequential = p["sequential_image_generation"]
-    options = SequentialImageGenerationOptions(max_images=p["max_images"])
+    options = {"max_images": p["max_images"]}
     extra = {}
-
-    # if model == (
-    #     "doubao-seedream-5-0-pro-260628"
-    #     or "doubao-seedream-5-0-pro"
-    #     or "doubao-seedream-5-0-flash-260915"
-    # ):
-    #     sequential, options = None, None
-    #     extra["optimize_prompt_options"] = OptimizePromptOptions(mode=p["optimize_prompt_options"])
 
     request_args = {
         "model": model,
@@ -1260,11 +1248,9 @@ def _seedream(task):
         or model == "doubao-seedream-5-0-flash-260915"
     ):
         if model == "doubao-seedream-5-0-flash-260915":
-            extra["optimize_prompt_options"] = OptimizePromptOptions(mode="standard")
+            extra["optimize_prompt_options"] = {"mode": "standard"}
         else:
-            extra["optimize_prompt_options"] = OptimizePromptOptions(
-                mode=p["optimize_prompt_options"]
-            )
+            extra["optimize_prompt_options"] = {"mode": p["optimize_prompt_options"]}
         request_args.update(**extra)
         print(model)
     else:
