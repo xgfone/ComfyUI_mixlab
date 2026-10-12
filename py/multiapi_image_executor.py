@@ -1220,7 +1220,7 @@ def _seedream(task):
     key = _environment_key(p.get("key"), ("ARK_API_KEY",))
     try:
         from arkruntime import Ark
-        from arkruntime.types.images.images import (
+        from arkruntime.types.images import (
             OptimizePromptOptions,
             SequentialImageGenerationOptions,
         )

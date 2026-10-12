@@ -7,7 +7,7 @@ import numpy as np
 import requests
 import torch
 from arkruntime import Ark
-from arkruntime.types.images.images import (
+from arkruntime.types.images import (
     OptimizePromptOptions,
     SequentialImageGenerationOptions,
 )
