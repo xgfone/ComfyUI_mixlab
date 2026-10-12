@@ -1,7 +1,7 @@
 const { app } = window.comfyAPI.app;
 
 const IMAGE_INPUT_LIMITS = {
-  MAIE_GeminiTask: 6,
+  MAIE_GeminiTask: 14,
   MAIE_SeedreamTask: 10,
   MAIE_GPTImageTask: 16,
   MAIE_QwenTask: 3,

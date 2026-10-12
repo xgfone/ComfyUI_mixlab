@@ -5,4 +5,4 @@ aiohttp
 requests
 
 # doubao
-volcengine-python-sdk[ark]
+arkruntime

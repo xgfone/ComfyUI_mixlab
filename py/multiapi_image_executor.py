@@ -25,7 +25,7 @@ CATEGORY = "MultiAPI Image Executor"
 # Reference-image limits are enforced again on the server because a workflow
 # JSON can be edited outside of the browser UI.
 _REFERENCE_IMAGE_LIMITS = {
-    "gemini": 6,
+    "gemini": 14,
     "seedream": 10,
     "gpt_image": 16,
     "qwen": 3,
@@ -138,6 +138,7 @@ class SeedreamImageGenTask:
                         "doubao-seedream-4-0-250828",
                         "doubao-seedream-4-5-251128",
                         "doubao-seedream-5-0-lite-260128",
+                        "doubao-seedream-5-0-flash-260915",
                         "doubao-seedream-5-0-pro-260628",
                     ],
                 ),
@@ -521,7 +522,15 @@ _SEEDREAM_PRO_2K_SIZES = {
 
 
 def _seedream_size(model, aspect_ratio, resolution):
-    if model == "doubao-seedream-5-0-pro-260628" and resolution == "2K":
+    if (
+        model
+        == (
+            "doubao-seedream-5-0-pro-260628"
+            or "doubao-seedream-5-0-pro"
+            or "doubao-seedream-5-0-flash-260915"
+        )
+        and resolution == "2K"
+    ):
         sizes = _SEEDREAM_PRO_2K_SIZES
     else:
         sizes = _SEEDREAM_STANDARD_SIZES.get(resolution)
@@ -1210,8 +1219,8 @@ def _seedream(task):
     p = task.params
     key = _environment_key(p.get("key"), ("ARK_API_KEY",))
     try:
-        from volcenginesdkarkruntime import Ark
-        from volcenginesdkarkruntime.types.images.images import (
+        from arkruntime import Ark
+        from arkruntime.types.images.images import (
             OptimizePromptOptions,
             SequentialImageGenerationOptions,
         )
@@ -1227,21 +1236,46 @@ def _seedream(task):
     options = SequentialImageGenerationOptions(max_images=p["max_images"])
     extra = {}
 
-    if model == "doubao-seedream-5-0-pro-260628":
-        sequential, options = None, None
-        extra["optimize_prompt_options"] = OptimizePromptOptions(mode=p["optimize_prompt_options"])
+    # if model == (
+    #     "doubao-seedream-5-0-pro-260628"
+    #     or "doubao-seedream-5-0-pro"
+    #     or "doubao-seedream-5-0-flash-260915"
+    # ):
+    #     sequential, options = None, None
+    #     extra["optimize_prompt_options"] = OptimizePromptOptions(mode=p["optimize_prompt_options"])
 
     request_args = {
         "model": model,
         "prompt": task.prompt,
         "size": size,
-        "sequential_image_generation": sequential,
-        "sequential_image_generation_options": options,
         "response_format": p["response_format"],
         "watermark": p["watermark"],
         "stream": p["stream"],
-        **extra,
     }
+
+    # seedream-5-0-flash兼容参数
+    if (
+        model == "doubao-seedream-5-0-pro-260628"
+        or model == "doubao-seedream-5-0-pro"
+        or model == "doubao-seedream-5-0-flash-260915"
+    ):
+        if model == "doubao-seedream-5-0-flash-260915":
+            extra["optimize_prompt_options"] = OptimizePromptOptions(mode="standard")
+        else:
+            extra["optimize_prompt_options"] = OptimizePromptOptions(
+                mode=p["optimize_prompt_options"]
+            )
+        request_args.update(**extra)
+        print(model)
+    else:
+        request_args.update(
+            {
+                "sequential_image_generation": sequential,
+                "sequential_image_generation_options": options,
+            }
+        )
+
+    print(request_args)
     if task.images:
         request_args["image"] = [_png_data_url(image) for image in task.images]
 
