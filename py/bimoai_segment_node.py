@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
+
+from .util.key_resolver import get_key, get_key_name
 
 DEFAULT_MODEL_ID = "default_segment"
 DEFAULT_BASE_URL = "https://api.bimoai.com"
@@ -22,6 +23,7 @@ PENDING_STATUSES = {"Queuing", "Processing"}
 TERMINAL_ERROR_STATUSES = {"Failure", "NotFound"}
 TRANSIENT_STATUSES = {"ServerError"}
 KNOWN_STATUSES = PENDING_STATUSES | TERMINAL_ERROR_STATUSES | TRANSIENT_STATUSES | {"Success"}
+RETRY_COUNT = 3
 
 
 class BimoAISegmentError(RuntimeError):
@@ -245,19 +247,28 @@ class BimoAISegmentImage:
                 "MaxPersons": inputs.max_persons,
             }
 
-            try:
-                submit_response = self._request_wrapped_json(
-                    session=session,
-                    method="POST",
-                    url=submit_url,
-                    headers=headers,
-                    timeout_seconds=inputs.http_timeout_seconds,
-                    json_body=submit_payload,
-                )
-            except requests.RequestException as exc:
-                # Never auto-retry submission, to avoid creating duplicate tasks.
-                msg = f"提交抠图任务时发生网络错误：{type(exc).__name__}: {exc}"
-                raise BimoAISegmentError(msg) from exc
+            for attempt in range(RETRY_COUNT):
+                try:
+                    submit_response = self._request_wrapped_json(
+                        session=session,
+                        method="POST",
+                        url=submit_url,
+                        headers=headers,
+                        timeout_seconds=inputs.http_timeout_seconds,
+                        json_body=submit_payload,
+                    )
+                    break
+
+                except requests.RequestException as exc:
+                    if attempt < RETRY_COUNT - 1 and isinstance(
+                        exc, (requests.ConnectionError, requests.Timeout)
+                    ):
+                        # Retry only transport failures before a TaskId is obtained.
+                        # A lost response can mean the server already accepted the task.
+                        self._sleep(1.0)
+                        continue
+                    msg = f"提交抠图任务时发生网络错误：{type(exc).__name__}: {exc}"
+                    raise BimoAISegmentError(msg) from exc
 
             data = _require_wrapped_data(submit_response, context="抠图任务提交接口")
             task_id = _require_nonempty_string(data, "TaskId", context="抠图任务提交接口的 Data")
@@ -491,7 +502,8 @@ class BimoAISegmentImage:
 
 
 def _get_token_from_environment() -> str:
-    token = os.environ.get("BIMOAI_TOKEN", "").strip()
+    # token = os.environ.get("BIMOAI_TOKEN", "").strip()
+    token = get_key(get_key_name("BIMOAI_TOKEN"))
     if not token:
         raise BimoAISegmentError("缺少环境变量 BIMOAI_TOKEN。")
     return token
