@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import math
 import os
 import re
 import threading
@@ -330,6 +331,297 @@ class QwenImageGenTask:
 
     def submit(self, prompt, image1=None, **kwargs):
         return _task("qwen", prompt, kwargs, {"image1": image1, **kwargs})
+
+
+_SMART_NODE_TYPES = {
+    "gemini": GeminiImageGenTask,
+    "seedream": SeedreamImageGenTask,
+    "gpt_image": GPTImageGenTask,
+    "qwen": QwenImageGenTask,
+}
+_SMART_MODEL_PREFIXES = {
+    "gemini": "gemini-",
+    "seedream": "doubao-seedream-",
+    "gpt_image": "gpt-image-",
+    "qwen": "qwen-image-",
+}
+_SMART_PARAMETERS = {
+    "gemini": {
+        "aspect_ratio",
+        "image_size",
+        "max_images",
+        "base_url",
+        "key",
+        "timeout",
+        "enable_auto_retry",
+    },
+    "seedream": {
+        "aspect_ratio",
+        "resolution",
+        "size",
+        "sequential_image_generation",
+        "max_images",
+        "response_format",
+        "watermark",
+        "stream",
+        "base_url",
+        "key",
+        "timeout",
+        "enable_auto_retry",
+        "optimize_prompt_options",
+    },
+    "gpt_image": {
+        "aspect_ratio",
+        "quality",
+        "max_images",
+        "output_format",
+        "output_compression",
+        "base_url",
+        "key",
+        "timeout",
+        "enable_auto_retry",
+    },
+    "qwen": {
+        "protocol",
+        "size",
+        "max_images",
+        "negative_prompt",
+        "prompt_extend",
+        "watermark",
+        "enable_thinking",
+        "seed",
+        "base_url",
+        "key",
+        "timeout",
+        "enable_auto_retry",
+    },
+}
+
+
+def _smart_schema(provider):
+    inputs = _SMART_NODE_TYPES[provider].INPUT_TYPES()
+    return {**inputs["required"], **inputs.get("optional", {})}
+
+
+def _smart_default(spec):
+    options = spec[1] if len(spec) > 1 else {}
+    if "default" in options:
+        return options["default"]
+    return spec[0][0] if isinstance(spec[0], list) else ""
+
+
+def _smart_supported(provider, model):
+    supported = _SMART_PARAMETERS[provider].copy()
+    if provider == "seedream":
+        if model in {
+            "doubao-seedream-5-0-pro-260628",
+            "doubao-seedream-5-0-pro",
+            "doubao-seedream-5-0-flash-260915",
+        }:
+            supported.discard("sequential_image_generation")
+            if model == "doubao-seedream-5-0-flash-260915":
+                supported.discard("optimize_prompt_options")  # Adapter fixes this to standard.
+        else:
+            supported.discard("optimize_prompt_options")
+    return supported
+
+
+def _parse_smart_overrides(value):
+    """Normalize JSON syntax, leaving punctuation within text values untouched."""
+    if not isinstance(value, str):
+        raise ValueError("override_config 必须是 JSON 对象字符串")
+    if not value.strip():
+        return {}
+    punctuation = {"，": ",", "：": ":", "｛": "{", "｝": "}", "［": "[", "］": "]"}
+    quotes = {'"': '"', "“": "”", "＂": "＂", "‘": "’"}
+    output, closing, escaped = [], None, False
+    for character in value.lstrip("\ufeff"):
+        if character in "\r\n":
+            if closing is None:
+                output.append(" ")
+            continue
+        if closing is not None:
+            if escaped:
+                output.append(character)
+                escaped = False
+            elif character == "\\":
+                output.append(character)
+                escaped = True
+            elif character == closing:
+                output.append('"')
+                closing = None
+            elif character == '"':
+                output.append('\\"')
+            elif character == "\t":
+                output.append("\\t")
+            else:
+                output.append(character)
+        elif character in quotes:
+            closing = quotes[character]
+            output.append('"')
+        else:
+            output.append(punctuation.get(character, character))
+    try:
+        config = json.loads("".join(output))
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"override_config JSON 格式错误（第 {error.lineno} 行，第 {error.colno} 列）：{error.msg}"
+        ) from error
+    if not isinstance(config, dict):
+        raise ValueError("override_config 必须是 JSON 对象，不能是数组或其他值")
+    return config
+
+
+def _validate_smart_parameter(name, value, spec):
+    kind = spec[0]
+    options = spec[1] if len(spec) > 1 else {}
+    valid = True
+    if isinstance(kind, list):
+        valid = value in kind
+    elif kind == "BOOLEAN":
+        valid = isinstance(value, bool)
+    elif kind == "INT":
+        valid = isinstance(value, int) and not isinstance(value, bool)
+    elif kind == "FLOAT":
+        valid = (
+            isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        )
+    elif kind == "STRING":
+        valid = isinstance(value, str)
+    if valid and kind in ("INT", "FLOAT"):
+        valid = options.get("min", -math.inf) <= value <= options.get("max", math.inf)
+    if not valid:
+        raise ValueError(f"智能生图参数 {name} 的值不合法，请检查类型、可选值或范围")
+    return value
+
+
+class SmartImageGenTask:
+    @classmethod
+    def INPUT_TYPES(cls):
+        required = {"prompt": ("STRING", {"multiline": True, "default": ""})}
+        models, profiles = [], {}
+        for provider in _SMART_NODE_TYPES:
+            schema = _smart_schema(provider)
+            models.extend(schema["model"][0])
+            profiles[provider] = {
+                "prefix": _SMART_MODEL_PREFIXES[provider],
+                "parameters": sorted(_SMART_PARAMETERS[provider]),
+                "image_limit": _REFERENCE_IMAGE_LIMITS[provider],
+            }
+            for name, spec in schema.items():
+                if name not in _SMART_PARAMETERS[provider]:
+                    continue
+                if name not in required:
+                    required[name] = spec
+                elif isinstance(spec[0], list) and isinstance(required[name][0], list):
+                    choices = list(dict.fromkeys(required[name][0] + spec[0]))
+                    required[name] = (choices, {"default": _smart_default(required[name])})
+        required = {
+            "prompt": required.pop("prompt"),
+            "model": (models, {"smart_profiles": profiles}),
+            **required,
+        }
+        # Blank means resolve defaults from the final model, even after overrides.
+        required["base_url"] = (
+            "STRING",
+            {"default": "", "placeholder": "留空使用最终模型的平台默认地址"},
+        )
+        required["key"] = (
+            "STRING",
+            {"default": "", "placeholder": "留空按最终平台读取 key；也可填写 key 名称"},
+        )
+        required["size"] = (
+            "STRING",
+            {"default": "", "placeholder": "留空使用模型默认尺寸，例如 2048x2048"},
+        )
+        required["timeout"] = ("INT", {"default": 70, "min": 10, "max": 900})
+        required["seed"] = ("INT", {"default": 0, "min": 0, "max": 2147483647})
+        return {
+            "required": required,
+            "optional": {
+                "override_config": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "tooltip": "JSON 对象；优先于 UI，支持中文结构标点和换行",
+                    },
+                ),
+                "imagecount": (
+                    "INT",
+                    {"default": 1, "min": 0, "max": max(_REFERENCE_IMAGE_LIMITS.values())},
+                ),
+                **{
+                    f"image{i}": ("IMAGE",)
+                    for i in range(1, max(_REFERENCE_IMAGE_LIMITS.values()) + 1)
+                },
+            },
+        }
+
+    RETURN_TYPES = (TASK_TYPE,)
+    RETURN_NAMES = ("task",)
+    FUNCTION = "submit"
+    CATEGORY = CATEGORY
+
+    def submit(self, prompt, model, override_config="", **kwargs):
+        overrides = _parse_smart_overrides(override_config)
+        final_model = overrides.get("model", model)
+        if not isinstance(final_model, str) or not final_model.strip():
+            raise ValueError("智能生图 model 必须是非空字符串")
+        final_model = final_model.strip()
+        provider = next(
+            (
+                name
+                for name, prefix in _SMART_MODEL_PREFIXES.items()
+                if final_model.startswith(prefix)
+            ),
+            None,
+        )
+        if provider is None:
+            raise ValueError(f"无法识别模型 {final_model!r} 所属的平台")
+        schema = _smart_schema(provider)
+        supported = _smart_supported(provider, final_model)
+        # This control is shared by the executor even on older Qwen task schemas.
+        schema["enable_auto_retry"] = ("BOOLEAN", {"default": True})
+        schema["timeout"] = ("INT", {"default": 70, "min": 10, "max": 900})
+        params = {name: _smart_default(schema[name]) for name in supported}
+        aliases = (
+            {"image_size": "resolution"}
+            if provider == "seedream"
+            else ({"resolution": "image_size"} if provider == "gemini" else {})
+        )
+        normalized = {
+            aliases.get(name, name): value
+            for name, value in overrides.items()
+            if name not in aliases
+        }
+        for name, target in aliases.items():
+            if name in overrides and target not in normalized:
+                normalized[target] = overrides[name]
+        for name in supported:
+            explicit = name in normalized
+            value = normalized[name] if explicit else kwargs.get(name, params.get(name))
+            if name in {"base_url", "size"} and value == "":
+                value = _smart_default(schema[name])
+            spec = schema[name]
+            if name == "size":
+                spec = ("STRING",)
+            # A shared UI choice may be unavailable on the overridden model.
+            if not explicit and isinstance(spec[0], list) and value not in spec[0]:
+                value = _smart_default(spec)
+            params[name] = _validate_smart_parameter(name, value, spec)
+        params["model"] = final_model
+        if provider == "qwen":
+            params["size"] = _qwen_size(params["size"])
+        elif provider == "seedream" and params.get("size"):
+            _manual_pixel_size(params["size"])
+        final_prompt = overrides.get("prompt", prompt)
+        if not isinstance(final_prompt, str):
+            raise ValueError("智能生图 prompt 必须是字符串")
+        params["_smart_ignored_parameters"] = sorted(
+            set(overrides) - {"model", "prompt"} - supported - set(aliases)
+        )
+        return _task(provider, final_prompt, params, kwargs)
 
 
 ## GenTask End
@@ -1228,7 +1520,7 @@ def _seedream(task):
     manual_size = _manual_pixel_size(p.get("size"))
     size = manual_size or _seedream_size(model, p["aspect_ratio"], p["resolution"])
     size_source = "手动输入" if manual_size else "分辨率与宽高比预设"
-    sequential = p["sequential_image_generation"]
+    sequential = p.get("sequential_image_generation", "auto")
     options = {"max_images": p["max_images"]}
     extra = {}
 
@@ -1500,6 +1792,10 @@ class MultiAPIImageExecutor:
                     output_images.append(_tensor(Image.new("RGB", (512, 512), "red")))
                     statuses.append(result["status"])
 
+            ignored_parameters = task.params.get("_smart_ignored_parameters", ())
+            if ignored_parameters:
+                logs.append("已忽略不支持的覆写参数: " + ", ".join(ignored_parameters))
+
         if failures and not placeholders:
             logs.append("\n失败任务数未超过 ignore_failure，失败任务已忽略且不输出占位图。")
         elif failures:
@@ -1508,6 +1804,7 @@ class MultiAPIImageExecutor:
 
 
 NODE_CLASS_MAPPINGS = {
+    "MAIE_SmartTask": SmartImageGenTask,
     "MAIE_GeminiTask": GeminiImageGenTask,
     "MAIE_SeedreamTask": SeedreamImageGenTask,
     "MAIE_GPTImageTask": GPTImageGenTask,
@@ -1516,6 +1813,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "MAIE_SmartTask": "Smart Image Task · MultiAPI Image Executor",
     "MAIE_QwenTask": "Qwen Image Task · MultiAPI Image Executor",
     "MAIE_GeminiTask": "Gemini Task · MultiAPI Image Executor",
     "MAIE_SeedreamTask": "Seedream Task · MultiAPI Image Executor",
