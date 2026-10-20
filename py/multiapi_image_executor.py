@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import logging
 import math
 import os
 import re
@@ -23,6 +24,8 @@ from .util.key_resolver import get_key, get_key_name
 
 TASK_TYPE = "MULTIAPI_IMAGE_TASK"
 CATEGORY = "MultiAPI Image Executor"
+_LOGGER = logging.getLogger(__name__)
+_HTTP_CONNECT_TIMEOUT_SECONDS = 10.0
 # Reference-image limits are enforced again on the server because a workflow
 # JSON can be edited outside of the browser UI.
 _REFERENCE_IMAGE_LIMITS = {
@@ -398,6 +401,94 @@ _SMART_PARAMETERS = {
 }
 
 
+# Accepted only through override_config; do not add widgets to production nodes.
+_SMART_OVERRIDE_PARAMETERS = {
+    "gpt_image": {"background": (["auto", "opaque", "transparent"],)},
+}
+
+# These fields belong to node routing, image inputs or transport, not API options.
+_API_PARAMS_RESERVED = {
+    "model",
+    "prompt",
+    "image",
+    "image[]",
+    "images",
+    "mask",
+    "contents",
+    "messages",
+    "input",
+    "key",
+    "api_key",
+    "token",
+    "authorization",
+    "headers",
+    "extra_headers",
+    "extra_query",
+    "extra_body",
+    "base_url",
+    "url",
+    "timeout",
+    "enable_auto_retry",
+    "provider",
+    "protocol",
+    "stream",
+    "files",
+    "json",
+    "data",
+    "params",
+}
+
+
+def _validate_api_params(value):
+    if not isinstance(value, dict):
+        raise ValueError("api_params 必须是 JSON 对象")
+    reserved = sorted(
+        name for name in value if name.lower().split("[", 1)[0] in _API_PARAMS_RESERVED
+    )
+    if reserved:
+        raise ValueError("api_params 不能覆写节点管理的字段: " + ", ".join(reserved))
+    try:
+        json.dumps(value, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise ValueError("api_params 必须包含有效的 JSON 值，不能包含 NaN 或 Infinity") from error
+    return value
+
+
+def _merge_api_params(task, payload):
+    """Merge native request fields last without mutating task config or defaults."""
+
+    def merge(base, extra):
+        result = dict(base)
+        for name, value in extra.items():
+            if isinstance(result.get(name), dict) and isinstance(value, dict):
+                result[name] = merge(result[name], value)
+            else:
+                result[name] = value
+        return result
+
+    return merge(payload, _validate_api_params(task.params.get("api_params", {})))
+
+
+def _validate_gpt_background(payload):
+    if "background" in payload:
+        _validate_smart_parameter(
+            "background",
+            payload["background"],
+            _SMART_OVERRIDE_PARAMETERS["gpt_image"]["background"],
+        )
+    if payload.get("background") == "transparent" and payload.get("output_format") not in (
+        "png",
+        "webp",
+    ):
+        raise ValueError("background=transparent 需要 output_format=png 或 webp，不能使用 jpeg")
+
+
+def _multipart_parameter(value):
+    if value is None or isinstance(value, (dict, list, bool)):
+        return json.dumps(value, ensure_ascii=False, allow_nan=False)
+    return str(value)
+
+
 def _smart_schema(provider):
     inputs = _SMART_NODE_TYPES[provider].INPUT_TYPES()
     return {**inputs["required"], **inputs.get("optional", {})}
@@ -565,6 +656,7 @@ class SmartImageGenTask:
 
     def submit(self, prompt, model, override_config="", **kwargs):
         overrides = _parse_smart_overrides(override_config)
+        api_params = _validate_api_params(overrides.get("api_params", {}))
         final_model = overrides.get("model", model)
         if not isinstance(final_model, str) or not final_model.strip():
             raise ValueError("智能生图 model 必须是非空字符串")
@@ -610,6 +702,14 @@ class SmartImageGenTask:
             if not explicit and isinstance(spec[0], list) and value not in spec[0]:
                 value = _smart_default(spec)
             params[name] = _validate_smart_parameter(name, value, spec)
+        override_parameters = _SMART_OVERRIDE_PARAMETERS.get(provider, {})
+        for name, spec in override_parameters.items():
+            if name in normalized:
+                params[name] = _validate_smart_parameter(name, normalized[name], spec)
+        if api_params:
+            params["api_params"] = api_params
+        if provider == "gpt_image":
+            _validate_gpt_background({**params, **api_params})
         params["model"] = final_model
         if provider == "qwen":
             params["size"] = _qwen_size(params["size"])
@@ -619,7 +719,11 @@ class SmartImageGenTask:
         if not isinstance(final_prompt, str):
             raise ValueError("智能生图 prompt 必须是字符串")
         params["_smart_ignored_parameters"] = sorted(
-            set(overrides) - {"model", "prompt"} - supported - set(aliases)
+            set(overrides)
+            - {"model", "prompt", "api_params"}
+            - supported
+            - set(aliases)
+            - set(override_parameters)
         )
         return _task(provider, final_prompt, params, kwargs)
 
@@ -708,8 +812,13 @@ def _pil(tensor):
     return Image.fromarray(array).convert("RGB")
 
 
-def _tensor(image):
-    return torch.from_numpy(np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0).unsqueeze(0)
+def _tensor(image, preserve_alpha=False):
+    mode = (
+        "RGBA"
+        if preserve_alpha and ("A" in image.getbands() or "transparency" in image.info)
+        else "RGB"
+    )
+    return torch.from_numpy(np.asarray(image.convert(mode), dtype=np.float32) / 255.0).unsqueeze(0)
 
 
 def _png_data_url(tensor):
@@ -718,16 +827,116 @@ def _png_data_url(tensor):
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def _decode_image(data):
+def _decode_image(data, preserve_alpha=False):
     if isinstance(data, str) and data.startswith("data:"):
         data = data.split(",", 1)[1]
-    return _tensor(Image.open(io.BytesIO(base64.b64decode(data))))
+    return _tensor(Image.open(io.BytesIO(base64.b64decode(data))), preserve_alpha=preserve_alpha)
 
 
-def _download(url, timeout):
-    response = requests.get(url, timeout=timeout)
+def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", **kwargs):
+    """Bound connection setup separately; keep the configured read allowance."""
+    read_timeout = float(timeout)
+    connect_timeout = min(_HTTP_CONNECT_TIMEOUT_SECONDS, read_timeout)
+    parsed = urlparse(url)
+    # Download URLs may be signed; log only their host, never query credentials.
+    target = f"{parsed.scheme}://{parsed.hostname}"
+    if stage == "api":
+        target += parsed.path
+    identifier = uuid4().hex[:10]
+    model = task.params.get("model", "") if task is not None else ""
+    proxy_env = any(
+        os.environ.get(name)
+        for name in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        )
+    )
+    started = time.monotonic()
+    _LOGGER.info(
+        "[MultiAPI %s] %s start: model=%s method=%s target=%s connect_timeout=%gs read_timeout=%gs proxy_env_present=%s",
+        identifier,
+        stage,
+        model,
+        method,
+        target,
+        connect_timeout,
+        read_timeout,
+        proxy_env,
+    )
+    try:
+        send = requests.post if method == "POST" else requests.get
+        response = send(url, timeout=(connect_timeout, read_timeout), **kwargs)
+    except requests.RequestException as error:
+        _LOGGER.warning(
+            "[MultiAPI %s] %s failed: model=%s target=%s elapsed=%.2fs error_type=%s read_timeout=%gs",
+            identifier,
+            stage,
+            model,
+            target,
+            time.monotonic() - started,
+            type(error).__name__,
+            read_timeout,
+        )
+        raise
+    request_id = next(
+        (
+            response.headers.get(name)
+            for name in (
+                "x-request-id",
+                "x-trace-id",
+                "request-id",
+                "trace-id",
+                "x-amzn-requestid",
+            )
+            if response.headers.get(name)
+        ),
+        "unavailable",
+    )
+    _LOGGER.info(
+        "[MultiAPI %s] %s response complete: elapsed=%.2fs status=%s request_id=%s",
+        identifier,
+        stage,
+        time.monotonic() - started,
+        response.status_code,
+        request_id,
+    )
+    return response
+
+
+def _is_read_timeout(error):
+    # Requests can wrap urllib3 ReadTimeoutError in ConnectionError while
+    # consuming a response body. Ark/httpx can also wrap a ReadTimeout.
+    pending, seen = [error], set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, requests.ReadTimeout) or type(current).__name__ in {
+            "ReadTimeout",
+            "ReadTimeoutError",
+        }:
+            return True
+        pending.extend(
+            value
+            for value in (
+                current.__cause__,
+                current.__context__,
+                *current.args,
+            )
+            if isinstance(value, BaseException)
+        )
+    return False
+
+
+def _download(url, timeout, preserve_alpha=False, task=None):
+    response = _request_with_diagnostics("GET", url, timeout, task=task, stage="image_download")
     response.raise_for_status()
-    return _tensor(Image.open(io.BytesIO(response.content)))
+    return _tensor(Image.open(io.BytesIO(response.content)), preserve_alpha=preserve_alpha)
 
 
 def _size(ratio):
@@ -1321,6 +1530,11 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
                 else:
                     images, log = operation(task)
             except Exception as error:
+                # A timed-out POST may already have started a billable job;
+                # replaying it can duplicate generation and repeat a long wait.
+                # This also avoids regenerating after a result-download timeout.
+                if _is_read_timeout(error):
+                    raise
                 if attempt == attempts:
                     raise
                 if is_qwen:
@@ -1408,12 +1622,15 @@ def _gemini(task):
             "imageConfig": {"aspectRatio": p["aspect_ratio"], "imageSize": p["image_size"]},
         },
     }
+    payload = _merge_api_params(task, payload)
 
-    response = requests.post(
+    response = _request_with_diagnostics(
+        "POST",
         url,
+        p["timeout"],
+        task=task,
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         json=payload,
-        timeout=p["timeout"],
     )
 
     if response.status_code == 404:
@@ -1463,6 +1680,10 @@ def _gpt(task):
         "output_format": p["output_format"],
         "output_compression": p["output_compression"],
     }
+    if "background" in p:
+        data["background"] = p["background"]
+    data = _merge_api_params(task, data)
+    _validate_gpt_background(data)
     if task.images:
         url += "/images/edits"
         field = "image" if len(task.images) == 1 else "image[]"
@@ -1471,35 +1692,51 @@ def _gpt(task):
             buffer = io.BytesIO()
             _pil(image).save(buffer, format="PNG")
             files.append((field, (f"image_{index}.png", buffer.getvalue(), "image/png")))
-        response = requests.post(
+        response = _request_with_diagnostics(
+            "POST",
             url,
+            p["timeout"],
+            task=task,
             headers={"Authorization": f"Bearer {key}"},
             files=files,
-            data={key: str(value) for key, value in data.items()},
-            timeout=p["timeout"],
+            data={key: _multipart_parameter(value) for key, value in data.items()},
         )
     else:
         url += "/images/generations"
-        response = requests.post(
+        response = _request_with_diagnostics(
+            "POST",
             url,
+            p["timeout"],
+            task=task,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json=data,
-            timeout=p["timeout"],
         )
 
+    decoding_started = time.monotonic()
+    _LOGGER.info("[MultiAPI] result_decode start: model=%s", p["model"])
     body = response.json()
     if not response.ok or body.get("error"):
         raise RuntimeError(f"OpenAI API 错误: {body.get('error') or response.text}")
 
     images = []
+    preserve_alpha = data.get("background") in ("auto", "transparent")
     for item in body.get("data", []):
         if item.get("b64_json"):
-            images.append(_decode_image(item["b64_json"]))
+            images.append(_decode_image(item["b64_json"], preserve_alpha=preserve_alpha))
         elif item.get("url"):
-            images.append(_download(item["url"], p["timeout"]))
+            images.append(
+                _download(item["url"], p["timeout"], preserve_alpha=preserve_alpha, task=task)
+            )
 
     if not images:
         raise RuntimeError("OpenAI API 未返回图像")
+
+    _LOGGER.info(
+        "[MultiAPI] result_decode complete: model=%s images=%s elapsed=%.2fs",
+        p["model"],
+        len(images),
+        time.monotonic() - decoding_started,
+    )
 
     return (
         images,
@@ -1557,6 +1794,10 @@ def _seedream(task):
     if task.images:
         request_args["image"] = [_png_data_url(image) for image in task.images]
 
+    if p.get("api_params"):
+        # Pass native extensions via extra_body so future fields also work with
+        # SDK versions whose generate() signature does not know their names.
+        request_args["extra_body"] = _merge_api_params(task, request_args)
     response = client.images.generate(**request_args)
 
     images = []
@@ -1608,17 +1849,20 @@ def _qwen(task):
         payload["images" if protocol == "ucloud" else "image"] = image_data
     if size != "auto":
         payload["size"] = size
+    payload = _merge_api_params(task, payload)
 
     if url.endswith("/v1"):
         url += "/images/generations"
     elif not url.endswith("/images/generations"):
         url += "/v1/images/generations"
 
-    response = requests.post(
+    response = _request_with_diagnostics(
+        "POST",
         url,
+        p["timeout"],
+        task=task,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json=payload,
-        timeout=p["timeout"],
     )
     if response.status_code == 429:
         raise QwenRateLimitError(
