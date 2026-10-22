@@ -52,6 +52,7 @@ _IMAGE_REQUIRED_PROVIDERS = ()
 _QWEN_REQUEST_INTERVAL_SECONDS = 1.0
 _QWEN_RATE_LIMIT_RETRIES = 5
 _QWEN_SSL_RETRIES = 2
+_TRANSPORT_RETRY_LIMITS = {"qwen": _QWEN_SSL_RETRIES, "gpt_image": 2}
 _QWEN_MAX_RETRY_DELAY_SECONDS = 5.0
 _QWEN_RATE_LIMIT_LOCK = threading.Lock()
 _QWEN_NEXT_REQUEST_AT = 0.0
@@ -837,12 +838,17 @@ def _decode_image(data, preserve_alpha=False):
 
 
 def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", **kwargs):
-    """Keep Qwen uploads on the configured socket timeout, not a 10s cap."""
+    """Keep image uploads on the configured socket timeout, not a 10s cap."""
     read_timeout = float(timeout)
     connect_timeout = min(_HTTP_CONNECT_TIMEOUT_SECONDS, read_timeout)
-    if task is not None and task.provider == "qwen" and method == "POST" and stage == "api":
+    if (
+        task is not None
+        and task.provider in _TRANSPORT_RETRY_LIMITS
+        and method == "POST"
+        and stage == "api"
+    ):
         # Requests/urllib3 also uses this socket timeout when sending the body.
-        # A short connect allowance can therefore abort large Base64 uploads.
+        # A short connect allowance can abort Base64 or multipart image uploads.
         connect_timeout = read_timeout
     parsed = urlparse(url)
     # Download URLs may be signed; log only their host, never query credentials.
@@ -1548,13 +1554,17 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
     attempt = 0
     ssl_retries = 0
     rate_limit_retries = 0
+    generic_retries = 0
     is_qwen = task.provider == "qwen"
+    transport_retry_limit = _TRANSPORT_RETRY_LIMITS.get(task.provider, 0)
     if is_qwen:
         attempts = 1 + (
             _QWEN_RATE_LIMIT_RETRIES + _QWEN_SSL_RETRIES
             if task.params.get("enable_auto_retry", True)
             else 0
         )
+    elif transport_retry_limit:
+        attempts = 1 + (transport_retry_limit if task.params.get("enable_auto_retry", True) else 0)
     else:
         attempts = 2 if task.params.get("enable_auto_retry", True) else 1
     try:
@@ -1587,11 +1597,11 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
                     raise
                 if attempt == attempts:
                     raise
-                if is_qwen:
+                if transport_retry_limit:
                     write_timeout = _is_write_timeout(error)
                     if _is_transient_ssl_error(error) or write_timeout:
                         # SSL wants and write timeouts share one bounded budget.
-                        if ssl_retries >= _QWEN_SSL_RETRIES:
+                        if ssl_retries >= transport_retry_limit:
                             raise
                         ssl_retries += 1
                         delay_seconds = min(
@@ -1599,18 +1609,28 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
                             _QWEN_MAX_RETRY_DELAY_SECONDS,
                         )
                         _LOGGER.warning(
-                            "[MultiAPI] Qwen temporary SSL/write failure: task=%s model=%s attempt=%s ssl_retry=%s/%s delay=%.2fs write_timeout=%s exception_chain=%s",
+                            "[MultiAPI] %s temporary SSL/write failure: task=%s model=%s attempt=%s ssl_retry=%s/%s delay=%.2fs write_timeout=%s exception_chain=%s",
+                            task.provider,
                             task_index,
                             task.params.get("model", ""),
                             attempt,
                             ssl_retries,
-                            _QWEN_SSL_RETRIES,
+                            transport_retry_limit,
                             delay_seconds,
                             write_timeout,
                             " -> ".join(type(item).__name__ for item in _exception_chain(error)),
                         )
-                        _qwen_defer_requests(delay_seconds)
+                        if is_qwen:
+                            _qwen_defer_requests(delay_seconds)
+                        else:
+                            time.sleep(delay_seconds)
                         continue
+                    if any(
+                        isinstance(item, (ssl.SSLError, requests.exceptions.SSLError))
+                        for item in _exception_chain(error)
+                    ):
+                        raise  # Certificate errors and other non-transient SSL failures.
+                if is_qwen:
                     if not _qwen_is_rate_limited(error):
                         raise
                     if rate_limit_retries >= _QWEN_RATE_LIMIT_RETRIES:
@@ -1621,6 +1641,10 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
                         raise
                     _qwen_defer_requests(delay_seconds)
                     continue
+                # Keep the existing one-retry budget for all other GPT errors.
+                if generic_retries >= 1:
+                    raise
+                generic_retries += 1
                 time.sleep(1.0)
                 continue
 
