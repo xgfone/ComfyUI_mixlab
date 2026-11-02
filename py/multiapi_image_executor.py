@@ -1891,13 +1891,21 @@ def _seedream(task):
         )
 
     print(request_args)
+    native_fields = {}
     if task.images:
-        request_args["image"] = [_png_data_url(image) for image in task.images]
+        image_data = [_png_data_url(image) for image in task.images]
+        host = (urlparse(p["base_url"]).hostname or "").lower()
+        if host == "modelverse.cn" or host.endswith(".modelverse.cn"):
+            # Ark's SDK only declares ``image``; UCloud's array field must
+            # travel through extra_body to preserve its native spelling.
+            native_fields["images"] = image_data
+        else:
+            request_args["image"] = image_data
 
-    if p.get("api_params"):
+    if native_fields or p.get("api_params"):
         # Pass native extensions via extra_body so future fields also work with
         # SDK versions whose generate() signature does not know their names.
-        request_args["extra_body"] = _merge_api_params(task, request_args)
+        request_args["extra_body"] = _merge_api_params(task, {**request_args, **native_fields})
     response = client.images.generate(**request_args)
 
     images = []
