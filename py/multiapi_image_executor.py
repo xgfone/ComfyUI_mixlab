@@ -917,6 +917,9 @@ def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", *
         response.status_code,
         request_id,
     )
+    # Preserve the gateway status before a provider tries to parse its body.
+    if response.status_code == 504:
+        raise requests.HTTPError("HTTP 504 Gateway Timeout", response=response)
     return response
 
 
@@ -2027,27 +2030,42 @@ FAILURE_NETWORK_CODES = (
     "bad gateway",
     "service unavailable",
 )
-FAILURE_TIMEOUT_CODES = (
-    "timeout",
-    "timed out",
-    "504",
-)
 
 
-def _is_timeout(err, text) -> bool:
-    if not isinstance(err, (TimeoutError, requests.exceptions.Timeout)):
-        return False
-    return any(word in text for word in FAILURE_TIMEOUT_CODES)
+def _is_timeout(error) -> bool:
+    # Recognize Ark, HTTPX and urllib3 exceptions without loading a provider SDK.
+    timeout_type_names = {
+        "ArkAPITimeoutError",
+        "ConnectTimeout",
+        "ConnectTimeoutError",
+        "PoolTimeout",
+        "ReadTimeout",
+        "ReadTimeoutError",
+        "TimeoutException",
+        "WriteTimeout",
+    }
+    for item in _exception_chain(error):
+        if isinstance(item, (TimeoutError, requests.exceptions.Timeout)):
+            return True
+        if type(item).__name__ in timeout_type_names:
+            return True
+        response = getattr(item, "response", None)
+        if (
+            getattr(item, "status_code", None) == 504
+            or getattr(response, "status_code", None) == 504
+        ):
+            return True
+    return False
 
 
 def _failure_status(error):
     if isinstance(error, DirectiveFailureError):
         return error.status
 
-    text = str(error).lower()
-    if _is_timeout(error, text):
+    if _is_timeout(error):
         return "failure_timeout"
 
+    text = str(error).lower()
     if any(word in text for word in FAILURE_SAFETY_CODES):
         return "failure_safety"
 
