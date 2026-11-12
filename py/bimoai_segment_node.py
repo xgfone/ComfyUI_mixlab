@@ -177,7 +177,11 @@ class BimoAISegmentImage:
                         "tooltip": "单次 HTTP 请求的最长等待时长。查询阶段仍受 timeout_seconds 总时长限制。",
                     },
                 ),
-            }
+            },
+            "optional": {
+                "white_bg_output": ("BOOLEAN", {"default": False}),
+                "auto_crop": ("BOOLEAN", {"default": False}),
+            },
         }
 
     @classmethod
@@ -224,7 +228,13 @@ class BimoAISegmentImage:
         poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
         timeout_seconds: float = DEFAULT_TOTAL_TIMEOUT_SECONDS,
         http_timeout_seconds: float = DEFAULT_HTTP_TIMEOUT_SECONDS,
+        white_bg_output: bool = False,
+        auto_crop: bool = False,
     ) -> Tuple[str, str, str]:
+        for name, value in (("white_bg_output", white_bg_output), ("auto_crop", auto_crop)):
+            if not isinstance(value, bool):
+                raise TypeError(f"{name} 必须是布尔值。")
+
         inputs = _validate_inputs(
             base_url=base_url,
             model_id=model_id,
@@ -245,6 +255,8 @@ class BimoAISegmentImage:
                 "ModelId": inputs.model_id,
                 "ImageUrl": inputs.image_url,
                 "MaxPersons": inputs.max_persons,
+                "white_bg_output": white_bg_output,
+                "auto_crop": auto_crop,
             }
 
             for attempt in range(RETRY_COUNT):
@@ -281,6 +293,8 @@ class BimoAISegmentImage:
             last_transient_error: Optional[str] = None
             query_count = 0
 
+            # Give the newly submitted task time to become visible before polling.
+            self._sleep(min(1.0, inputs.timeout_seconds))
             while True:
                 remaining = deadline - self._monotonic()
                 if remaining <= 0:
