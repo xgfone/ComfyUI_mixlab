@@ -18,7 +18,13 @@ function numberedInputs(node, prefix) {
     .map(({ input, index, match }) => ({ input, index, number: Number(match[1]) }));
 }
 
-function setupDynamicImageInputs(node, maximum) {
+function setupDynamicImageInputs(node, maximum, imageType = "IMAGE") {
+  const acceptsUrls = imageType === "IMAGE,STRING";
+  const referenceInputs = () => [
+    ...numberedInputs(node, "image"),
+    ...(acceptsUrls ? numberedInputs(node, "image_url") : []),
+  ];
+
   const rebuild = () => {
     const countWidget = node.widgets?.find((widget) => widget.name === "imagecount");
     if (!countWidget) return;
@@ -26,20 +32,42 @@ function setupDynamicImageInputs(node, maximum) {
     const limit = typeof maximum === "function" ? maximum() : maximum;
     countWidget.options = { ...countWidget.options, max: limit };
     const requested = Math.max(0, Math.min(limit, Math.floor(Number(countWidget.value) || 0)));
-    const connected = numberedInputs(node, "image")
+    const inputs = referenceInputs();
+    const connected = inputs
       .filter(({ input }) => input.link != null)
       .reduce((highest, { number }) => Math.max(highest, number), 0);
     const target = Math.max(requested, connected);
     countWidget.value = target;
 
-    for (const { index, number, input } of numberedInputs(node, "image").sort(
-      (a, b) => b.index - a.index,
-    )) {
-      if (number > target && input.link == null) node.removeInput(index);
+    // The legacy node can have both names for a slot. Prefer the linked one.
+    const preferred = new Map();
+    for (const { number, input } of inputs) {
+      if (!preferred.has(number) || input.link != null) preferred.set(number, input);
     }
-    const existing = new Set(numberedInputs(node, "image").map(({ number }) => number));
+    for (const { index, number, input } of inputs.sort((a, b) => b.index - a.index)) {
+      if (input.link == null && (number > target || preferred.get(number) !== input)) {
+        node.removeInput(index);
+      }
+    }
+    const existing = new Set();
+    for (const { input, number } of numberedInputs(node, "image")) {
+      input.type = imageType;
+      existing.add(number);
+    }
+    if (acceptsUrls) {
+      for (const { input, number } of numberedInputs(node, "image_url")) {
+        // Rename in place to retain the link and its slot index on reload.
+        // If both legacy inputs are linked, keep both for backend validation.
+        if (existing.has(number)) continue;
+        const name = `image${number}`;
+        if (input.label === input.name) input.label = name;
+        input.name = name;
+        input.type = imageType;
+        existing.add(number);
+      }
+    }
     for (let number = 1; number <= target; number += 1) {
-      if (!existing.has(number)) node.addInput(`image${number}`, "IMAGE", { shape: 7 });
+      if (!existing.has(number)) node.addInput(`image${number}`, imageType, { shape: 7 });
     }
 
     node.setSize(node.computeSize());
@@ -151,7 +179,7 @@ function setupSmartInputs(node, nodeData) {
     }
     node._maieRebuildImageInputs?.();
   };
-  setupDynamicImageInputs(node, maximum);
+  setupDynamicImageInputs(node, maximum, nodeData.input.optional.image1[0]);
   for (const name of ["model", "override_config"]) {
     const control = widget(name);
     if (!control) continue;
@@ -210,13 +238,13 @@ app.registerExtension({
   name: "multiapi_image_executor.dynamic_tasks",
   async beforeRegisterNodeDef(nodeType, nodeData) {
     const imageLimit = IMAGE_INPUT_LIMITS[nodeData.name];
-    if (nodeData.name !== "MAIE_ExecuteTasks" && nodeData.name !== "MAIE_SmartTask" && !imageLimit)
-      return;
+    const smart = ["MAIE_SmartTask", "MAIE_SmartImageSourceTask"].includes(nodeData.name);
+    if (nodeData.name !== "MAIE_ExecuteTasks" && !smart && !imageLimit) return;
     const original = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       original?.apply(this, arguments);
       if (nodeData.name === "MAIE_ExecuteTasks") setupDynamicTaskInputs(this);
-      if (nodeData.name === "MAIE_SmartTask") setupSmartInputs(this, nodeData);
+      if (smart) setupSmartInputs(this, nodeData);
       if (imageLimit) setupDynamicImageInputs(this, imageLimit);
     };
   },

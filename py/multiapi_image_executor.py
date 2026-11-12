@@ -10,10 +10,11 @@ import ssl
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urldefrag, urlparse
 from uuid import uuid4
 
 # import tuple
@@ -27,6 +28,7 @@ from .util.key_resolver import get_key, get_key_name
 TASK_TYPE = "MULTIAPI_IMAGE_TASK"
 CATEGORY = "MultiAPI Image Executor"
 _LOGGER = logging.getLogger(__name__)
+_TIMING_TASK_ID = ContextVar("multiapi_timing_task_id", default="-")
 _HTTP_CONNECT_TIMEOUT_SECONDS = 10.0
 # Reference-image limits are enforced again on the server because a workflow
 # JSON can be edited outside of the browser UI.
@@ -647,7 +649,7 @@ class SmartImageGenTask:
                     {"default": 1, "min": 0, "max": max(_REFERENCE_IMAGE_LIMITS.values())},
                 ),
                 **{
-                    f"image{i}": ("IMAGE",)
+                    f"image{i}": ("IMAGE,STRING",)
                     for i in range(1, max(_REFERENCE_IMAGE_LIMITS.values()) + 1)
                 },
             },
@@ -732,6 +734,18 @@ class SmartImageGenTask:
         return _task(provider, final_prompt, params, kwargs)
 
 
+class SmartImageSourceGenTask(SmartImageGenTask):
+    DEPRECATED = True
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = super().INPUT_TYPES()
+        # Accept saved API prompts that still use the old URL-only input names.
+        for index in range(1, max(_REFERENCE_IMAGE_LIMITS.values()) + 1):
+            inputs["optional"][f"image_url{index}"] = ("STRING", {"forceInput": True})
+        return inputs
+
+
 ## GenTask End
 #############################################################################
 
@@ -740,7 +754,7 @@ class SmartImageGenTask:
 class ImageGenerationTask:
     provider: str
     prompt: str
-    images: Tuple[torch.Tensor, ...]
+    images: Tuple[torch.Tensor | str, ...]
     params: Dict[str, Any]
 
 
@@ -766,23 +780,30 @@ class DirectiveFailureError(RuntimeError):
 
 
 def _images(kwargs):
-    result = []
-    image_items = []
+    references = {}
     for name, image in kwargs.items():
-        match = re.fullmatch(r"image(\d+)", name)
-        if match:
-            image_items.append((int(match.group(1)), image))
-
-    for _, image in sorted(image_items):
-        if image is None:
+        match = re.fullmatch(r"(image|image_url)(\d+)", name)
+        if not match or image is None:
             continue
-        shape = getattr(image, "shape", ())
-        if len(shape) < 3:
-            continue
-        height, width = int(shape[-3]), int(shape[-2])
-        if height >= 14 and width >= 14:
-            result.append(image)
-    return tuple(result)
+        kind, index_text = match.groups()
+        index = int(index_text)
+        if kind == "image_url" or isinstance(image, str):
+            if not isinstance(image, str):
+                raise ValueError(f"{name} 必须是 HTTP 或 HTTPS 图片 URL")
+            image = image.strip()
+            if not image:
+                continue
+            parsed = urlparse(image)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise ValueError(f"{name} 必须是 HTTP 或 HTTPS 图片 URL")
+        else:
+            shape = getattr(image, "shape", ())
+            if len(shape) < 3 or min(int(shape[-3]), int(shape[-2])) < 14:
+                continue
+        if index in references:
+            raise ValueError(f"第 {index} 个参考图位置只能连接 IMAGE 或 URL 其中一种")
+        references[index] = image
+    return tuple(references[index] for index in sorted(references))
 
 
 def _task(provider, prompt, params, kwargs):
@@ -801,7 +822,7 @@ def _task(provider, prompt, params, kwargs):
     clean_params = {
         key: value
         for key, value in params.items()
-        if not re.fullmatch(r"image\d+", key) and key != "imagecount"
+        if not re.fullmatch(r"image(?:_url)?\d+", key) and key != "imagecount"
     }
     return (ImageGenerationTask(provider, prompt, images, clean_params),)
 
@@ -837,6 +858,17 @@ def _decode_image(data, preserve_alpha=False):
     return _tensor(Image.open(io.BytesIO(base64.b64decode(data))), preserve_alpha=preserve_alpha)
 
 
+def _log_timing(level, message, *args):
+    if _LOGGER.isEnabledFor(level):
+        _LOGGER.log(
+            level,
+            message + " timestamp=%s task_id=%s",
+            *args,
+            datetime.now().astimezone().isoformat(timespec="milliseconds"),
+            _TIMING_TASK_ID.get(),
+        )
+
+
 def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", **kwargs):
     """Keep image uploads on the configured socket timeout, not a 10s cap."""
     read_timeout = float(timeout)
@@ -869,7 +901,8 @@ def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", *
         )
     )
     started = time.monotonic()
-    _LOGGER.info(
+    _log_timing(
+        logging.INFO,
         "[MultiAPI %s] %s start: model=%s method=%s target=%s connect_timeout=%gs read_timeout=%gs proxy_env_present=%s",
         identifier,
         stage,
@@ -884,7 +917,8 @@ def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", *
         send = requests.post if method == "POST" else requests.get
         response = send(url, timeout=(connect_timeout, read_timeout), **kwargs)
     except requests.RequestException as error:
-        _LOGGER.warning(
+        _log_timing(
+            logging.WARNING,
             "[MultiAPI %s] %s failed: model=%s target=%s elapsed=%.2fs error_type=%s read_timeout=%gs",
             identifier,
             stage,
@@ -909,7 +943,8 @@ def _request_with_diagnostics(method, url, timeout, *, task=None, stage="api", *
         ),
         "unavailable",
     )
-    _LOGGER.info(
+    _log_timing(
+        logging.INFO,
         "[MultiAPI %s] %s response complete: elapsed=%.2fs status=%s request_id=%s",
         identifier,
         stage,
@@ -953,6 +988,36 @@ def _download(url, timeout, preserve_alpha=False, task=None):
     response = _request_with_diagnostics("GET", url, timeout, task=task, stage="image_download")
     response.raise_for_status()
     return _tensor(Image.open(io.BytesIO(response.content)), preserve_alpha=preserve_alpha)
+
+
+def _download_reference_file(url, task):
+    try:
+        response = _request_with_diagnostics(
+            "GET", url, task.params["timeout"], task=task, stage="reference_download"
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        # Avoid including signed URL query parameters in the workflow output.
+        raise RuntimeError(f"参考图下载失败 ({type(error).__name__})") from error
+
+    content = response.content
+    try:
+        # Opening the image reads its metadata without decoding or re-encoding pixels.
+        with Image.open(io.BytesIO(content)) as image:
+            image_format, dimensions = image.format, image.size
+    except (OSError, Image.DecompressionBombError) as error:
+        raise ValueError("参考图 URL 未返回可识别的图片文件") from error
+    if min(dimensions) < 14:
+        raise ValueError("URL 参考图的宽和高均须不小于 14px")
+    formats = {
+        "JPEG": ("jpg", "image/jpeg"),
+        "PNG": ("png", "image/png"),
+        "WEBP": ("webp", "image/webp"),
+    }
+    if image_format not in formats:
+        raise ValueError("URL 参考图须为 JPEG、PNG 或 WebP 文件")
+    extension, mime_type = formats[image_format]
+    return content, mime_type, extension
 
 
 def _size(ratio):
@@ -1377,7 +1442,17 @@ def _write_task_api_log(
                 error=str(error),
             )
         ]
-    _append_api_log(records, ended_at)
+    if task.provider == "gpt_image":
+        log_started = time.monotonic()
+        _log_timing(logging.INFO, "[MultiAPI] apilog_write start: records=%s", len(records))
+        _append_api_log(records, ended_at)
+        _log_timing(
+            logging.INFO,
+            "[MultiAPI] apilog_write complete: elapsed=%.3fs",
+            time.monotonic() - log_started,
+        )
+    else:
+        _append_api_log(records, ended_at)
 
 
 def _test_directive_result(task):
@@ -1570,6 +1645,11 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
         attempts = 1 + (transport_retry_limit if task.params.get("enable_auto_retry", True) else 0)
     else:
         attempts = 2 if task.params.get("enable_auto_retry", True) else 1
+    timing_token = None
+    if task.provider == "gpt_image":
+        timing_token = _TIMING_TASK_ID.set(f"{prompt_uuid}:{task_index}:{uuid4().hex[:8]}")
+        task_started = time.monotonic()
+        _log_timing(logging.INFO, "[MultiAPI] task start: model=%s", task.params.get("model", ""))
     try:
         directive_result = _test_directive_result(task)
         if directive_result is not None:
@@ -1677,6 +1757,15 @@ def _retry(task, operation, execution_uuid=None, task_index=0):
         except Exception as log_error:
             raise RuntimeError(f"{error}; API 日志写入失败: {log_error}") from error
         raise
+    finally:
+        if timing_token is not None:
+            _log_timing(
+                logging.INFO,
+                "[MultiAPI] task finished: elapsed=%.3fs attempts=%s",
+                time.monotonic() - task_started,
+                attempt,
+            )
+            _TIMING_TASK_ID.reset(timing_token)
 
 
 def _build_gemini_url(base_url, model):
@@ -1714,10 +1803,14 @@ def _gemini(task):
 
     url = _build_gemini_url(p["base_url"], p["model"])
 
-    parts = [{"text": task.prompt}] + [
-        {"inlineData": {"mimeType": "image/png", "data": _png_data_url(image).split(",", 1)[1]}}
-        for image in task.images
-    ]
+    parts = [{"text": task.prompt}]
+    for image in task.images:
+        if isinstance(image, str):
+            content, mime_type, _ = _download_reference_file(image, task)
+            data = base64.b64encode(content).decode("ascii")
+        else:
+            mime_type, data = "image/png", _png_data_url(image).split(",", 1)[1]
+        parts.append({"inlineData": {"mimeType": mime_type, "data": data}})
     payload = {
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
@@ -1787,14 +1880,51 @@ def _gpt(task):
         data["background"] = p["background"]
     data = _merge_api_params(task, data)
     _validate_gpt_background(data)
-    if task.images:
-        url += "/images/edits"
+
+    base = urlparse(url)
+    host = (base.hostname or "").lower()
+    url_count = sum(isinstance(image, str) for image in task.images)
+    direct_urls = (
+        url_count > 0
+        and url_count == len(task.images)
+        and (host == "modelverse.cn" or host.endswith(".modelverse.cn"))
+    )
+    if direct_urls and not base.path:
+        url += "/v1"
+    url += "/images/edits" if task.images else "/images/generations"
+
+    if task.images and not direct_urls:
         field = "image" if len(task.images) == 1 else "image[]"
         files = []
+        stage = "reference_prepare" if url_count else "reference_encode"
+        prepare_started = time.monotonic()
+        _log_timing(
+            logging.INFO,
+            "[MultiAPI] %s start: images=%s urls=%s",
+            stage,
+            len(task.images),
+            url_count,
+        )
+        encoded_bytes = 0
+        upload_bytes = 0
         for index, image in enumerate(task.images, 1):
-            buffer = io.BytesIO()
-            _pil(image).save(buffer, format="PNG")
-            files.append((field, (f"image_{index}.png", buffer.getvalue(), "image/png")))
+            if isinstance(image, str):
+                content, mime_type, extension = _download_reference_file(image, task)
+            else:
+                buffer = io.BytesIO()
+                _pil(image).save(buffer, format="PNG")
+                content, mime_type, extension = buffer.getvalue(), "image/png", "png"
+                encoded_bytes += len(content)
+            upload_bytes += len(content)
+            files.append((field, (f"image_{index}.{extension}", content, mime_type)))
+        _log_timing(
+            logging.INFO,
+            "[MultiAPI] %s complete: elapsed=%.3fs png_bytes=%s upload_bytes=%s",
+            stage,
+            time.monotonic() - prepare_started,
+            encoded_bytes,
+            upload_bytes,
+        )
         response = _request_with_diagnostics(
             "POST",
             url,
@@ -1805,7 +1935,10 @@ def _gpt(task):
             data={key: _multipart_parameter(value) for key, value in data.items()},
         )
     else:
-        url += "/images/generations"
+        if direct_urls:
+            # ModelVerse accepts JSON edits with an array of URL strings.
+            data["images"] = [urldefrag(image).url for image in task.images]
+            _log_timing(logging.INFO, "[MultiAPI] reference_url direct: images=%s", url_count)
         response = _request_with_diagnostics(
             "POST",
             url,
@@ -1816,7 +1949,7 @@ def _gpt(task):
         )
 
     decoding_started = time.monotonic()
-    _LOGGER.info("[MultiAPI] result_decode start: model=%s", p["model"])
+    _log_timing(logging.INFO, "[MultiAPI] result_decode start: model=%s", p["model"])
     body = response.json()
     if not response.ok or body.get("error"):
         raise RuntimeError(f"OpenAI API 错误: {body.get('error') or response.text}")
@@ -1834,8 +1967,9 @@ def _gpt(task):
     if not images:
         raise RuntimeError("OpenAI API 未返回图像")
 
-    _LOGGER.info(
-        "[MultiAPI] result_decode complete: model=%s images=%s elapsed=%.2fs",
+    _log_timing(
+        logging.INFO,
+        "[MultiAPI] result_decode complete: model=%s images=%s elapsed=%.3fs",
         p["model"],
         len(images),
         time.monotonic() - decoding_started,
@@ -1896,7 +2030,9 @@ def _seedream(task):
     print(request_args)
     native_fields = {}
     if task.images:
-        image_data = [_png_data_url(image) for image in task.images]
+        image_data = [
+            image if isinstance(image, str) else _png_data_url(image) for image in task.images
+        ]
         host = (urlparse(p["base_url"]).hostname or "").lower()
         if host == "modelverse.cn" or host.endswith(".modelverse.cn"):
             # Ark's SDK only declares ``image``; UCloud's array field must
@@ -1943,7 +2079,9 @@ def _qwen(task):
     protocol = _qwen_protocol(url, p.get("protocol"))
     key = _environment_key(p.get("key"), _qwen_key_names(protocol))
     size = _qwen_size(p.get("size"))
-    image_data = [_png_data_url(image) for image in task.images]
+    image_data = [
+        image if isinstance(image, str) else _png_data_url(image) for image in task.images
+    ]
     payload = {
         "model": p["model"],
         "prompt": task.prompt,
@@ -2175,6 +2313,7 @@ class MultiAPIImageExecutor:
 
 NODE_CLASS_MAPPINGS = {
     "MAIE_SmartTask": SmartImageGenTask,
+    "MAIE_SmartImageSourceTask": SmartImageSourceGenTask,
     "MAIE_GeminiTask": GeminiImageGenTask,
     "MAIE_SeedreamTask": SeedreamImageGenTask,
     "MAIE_GPTImageTask": GPTImageGenTask,
@@ -2184,6 +2323,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MAIE_SmartTask": "Smart Image Task · MultiAPI Image Executor",
+    "MAIE_SmartImageSourceTask": "Smart Image Task (Image / URL) · MultiAPI Image Executor",
     "MAIE_QwenTask": "Qwen Image Task · MultiAPI Image Executor",
     "MAIE_GeminiTask": "Gemini Task · MultiAPI Image Executor",
     "MAIE_SeedreamTask": "Seedream Task · MultiAPI Image Executor",
