@@ -179,8 +179,8 @@ class BimoAISegmentImage:
                 ),
             },
             "optional": {
-                "white_bg_output": ("BOOLEAN", {"default": False}),
-                "auto_crop": ("BOOLEAN", {"default": False}),
+                "WhiteBg": ("BOOLEAN", {"default": False}),
+                "AutoCrop": ("BOOLEAN", {"default": False}),
             },
         }
 
@@ -228,10 +228,10 @@ class BimoAISegmentImage:
         poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
         timeout_seconds: float = DEFAULT_TOTAL_TIMEOUT_SECONDS,
         http_timeout_seconds: float = DEFAULT_HTTP_TIMEOUT_SECONDS,
-        white_bg_output: bool = False,
-        auto_crop: bool = False,
+        WhiteBg: bool = False,
+        AutoCrop: bool = False,
     ) -> Tuple[str, str, str]:
-        for name, value in (("white_bg_output", white_bg_output), ("auto_crop", auto_crop)):
+        for name, value in (("WhiteBg", WhiteBg), ("AutoCrop", AutoCrop)):
             if not isinstance(value, bool):
                 raise TypeError(f"{name} 必须是布尔值。")
 
@@ -255,8 +255,8 @@ class BimoAISegmentImage:
                 "ModelId": inputs.model_id,
                 "ImageUrl": inputs.image_url,
                 "MaxPersons": inputs.max_persons,
-                "white_bg_output": white_bg_output,
-                "auto_crop": auto_crop,
+                "WhiteBg": WhiteBg,
+                "AutoCrop": AutoCrop,
             }
 
             for attempt in range(RETRY_COUNT):
