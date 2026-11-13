@@ -1893,7 +1893,44 @@ def _gpt(task):
         url += "/v1"
     url += "/images/edits" if task.images else "/images/generations"
 
-    if task.images and not direct_urls:
+    use_multipart = bool(task.images) and not direct_urls
+    if not use_multipart:
+        json_data = data
+        if direct_urls:
+            # ModelVerse accepts JSON edits with an array of URL strings.
+            json_data = {**data, "images": [urldefrag(image).url for image in task.images]}
+            _log_timing(logging.INFO, "[MultiAPI] reference_url direct: images=%s", url_count)
+        response = _request_with_diagnostics(
+            "POST",
+            url,
+            p["timeout"],
+            task=task,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=json_data,
+        )
+        if direct_urls and response.status_code == 400:
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+            error = body.get("error") if isinstance(body, dict) else None
+            if (
+                isinstance(error, dict)
+                and error.get("code") == "invalid_type"
+                and re.fullmatch(r"images\[\d+\]", str(error.get("param")))
+                and "expected an object, but got a string" in str(error.get("message", "")).lower()
+            ):
+                # The JSON request was rejected before generation. Reuse the
+                # existing file upload path with the original image bytes.
+                use_multipart = True
+                _log_timing(
+                    logging.WARNING,
+                    "[MultiAPI] reference_url fallback: model=%s param=%s mode=multipart",
+                    p["model"],
+                    error["param"],
+                )
+
+    if use_multipart:
         field = "image" if len(task.images) == 1 else "image[]"
         files = []
         stage = "reference_prepare" if url_count else "reference_encode"
@@ -1934,20 +1971,6 @@ def _gpt(task):
             files=files,
             data={key: _multipart_parameter(value) for key, value in data.items()},
         )
-    else:
-        if direct_urls:
-            # ModelVerse accepts JSON edits with an array of URL strings.
-            data["images"] = [urldefrag(image).url for image in task.images]
-            _log_timing(logging.INFO, "[MultiAPI] reference_url direct: images=%s", url_count)
-        response = _request_with_diagnostics(
-            "POST",
-            url,
-            p["timeout"],
-            task=task,
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json=data,
-        )
-
     decoding_started = time.monotonic()
     _log_timing(logging.INFO, "[MultiAPI] result_decode start: model=%s", p["model"])
     body = response.json()
